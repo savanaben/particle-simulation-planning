@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Collision Simulator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e8e8e8;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0 30px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        h1 span {
+            color: #e94560;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        /* Control Panel */
+        .control-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .control-panel h2 {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #e94560;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .control-group {
+            margin-bottom: 18px;
+        }
+
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+
+        .control-group label span.value {
+            color: #fff;
+            font-weight: 500;
+            font-family: 'Consolas', monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #e94560;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 6px rgba(233, 69, 96, 0.4);
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 0.9rem;
+            font-family: 'Consolas', monospace;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #e94560, #c23a51);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 20px 0;
+        }
+
+        /* Canvas Area */
+        .canvas-area {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .canvas-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .canvas-header h2 {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #4ecdc4;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .time-display {
+            font-family: 'Consolas', monospace;
+            font-size: 1.1rem;
+            color: #fff;
+        }
+
+        .canvas-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #0a0a14;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 400px;
+        }
+
+        #simulationCanvas {
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            background: #111;
+        }
+
+        .playback-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            align-items: center;
+        }
+
+        .playback-controls button {
+            padding: 10px 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+        }
+
+        .playback-controls button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .playback-controls button.active {
+            background: #4ecdc4;
+            border-color: #4ecdc4;
+            color: #000;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .speed-control label {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .speed-control input[type="range"] {
+            width: 100px;
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin-top: 16px;
+            cursor: pointer;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #4ecdc4;
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-box .value {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .stat-box .label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .stat-box.no2 .value { color: #e94560; }
+        .stat-box.n2o4 .value { color: #4ecdc4; }
+        .stat-box.collisions .value { color: #ffd93d; }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.no2 { background: #e94560; }
+        .legend-dot.n2o4 { background: #4ecdc4; }
+
+        /* Error message */
+        .error-message {
+            background: rgba(233, 69, 96, 0.2);
+            border: 1px solid #e94560;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 16px;
+            color: #ff8a9b;
+            font-size: 0.85rem;
+        }
+
+        /* Data Tables Section */
+        .data-section {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .data-section.visible {
+            display: block;
+        }
+
+        .data-section h2 {
+            font-size: 1.2rem;
+            font-weight: 400;
+            color: #fff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .data-section h2 span {
+            color: #ffd93d;
+        }
+
+        .collision-table-wrapper {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .collision-table-wrapper h3 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #ffd93d;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .data-table th {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 500;
+            color: #aaa;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .data-table td {
+            padding: 10px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: #ddd;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .data-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .data-table .particle-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .data-table .particle-badge.no2 {
+            background: rgba(233, 69, 96, 0.2);
+            color: #e94560;
+        }
+
+        .data-table .particle-badge.n2o4 {
+            background: rgba(78, 205, 196, 0.2);
+            color: #4ecdc4;
+        }
+
+        .data-table .arrow {
+            color: #ffd93d;
+            font-weight: bold;
+            padding: 0 8px;
+        }
+
+        .trajectories-wrapper {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .trajectories-wrapper h3 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #4ecdc4;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .particle-group {
+            margin-bottom: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .particle-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .particle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .particle-header:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .particle-header .particle-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .particle-header .particle-id {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .particle-header .particle-id.no2 { color: #e94560; }
+        .particle-header .particle-id.n2o4 { color: #4ecdc4; }
+
+        .particle-header .particle-meta {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .particle-header .toggle-icon {
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .particle-header.expanded .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .particle-keyframes {
+            display: none;
+            padding: 0;
+        }
+
+        .particle-keyframes.expanded {
+            display: block;
+        }
+
+        .particle-keyframes table {
+            width: 100%;
+        }
+
+        .particle-keyframes th {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 8px 16px;
+            font-size: 0.7rem;
+        }
+
+        .particle-keyframes td {
+            padding: 8px 16px;
+            font-size: 0.8rem;
+        }
+
+        .keyframe-highlight {
+            background: rgba(255, 215, 61, 0.1) !important;
+        }
+
+        .collision-note {
+            font-size: 0.75rem;
+            color: #ffd93d;
+            font-style: italic;
+        }
+
+        .copy-btn {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .copy-btn.copied {
+            background: rgba(78, 205, 196, 0.2);
+            border-color: #4ecdc4;
+            color: #4ecdc4;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Particle <span>Collision</span> Simulator</h1>
+            <p class="subtitle">NO<sub>2</sub> + NO<sub>2</sub> → N<sub>2</sub>O<sub>4</sub> Pre-calculated Animation</p>
+        </header>
+
+        <div class="main-content">
+            <div class="control-panel">
+                <h2>Parameters</h2>
+
+                <div class="control-group">
+                    <label>
+                        Container Size
+                        <span class="value"><span id="containerSizeValue">300</span> × <span id="containerSizeValue2">300</span> px</span>
+                    </label>
+                    <input type="range" id="containerSize" min="200" max="500" value="300" step="10">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        NO<sub>2</sub> Particles
+                        <span class="value" id="numParticlesValue">15</span>
+                    </label>
+                    <input type="range" id="numParticles" min="4" max="15" value="15">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Collisions
+                        <span class="value" id="numCollisionsValue">6</span>
+                    </label>
+                    <input type="range" id="numCollisions" min="1" max="7" value="6">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Particle Speed
+                        <span class="value"><span id="particleSpeedValue">80</span> px/s</span>
+                    </label>
+                    <input type="range" id="particleSpeed" min="30" max="200" value="80" step="10">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Animation Duration
+                        <span class="value"><span id="animationDurationValue">8</span> s</span>
+                    </label>
+                    <input type="range" id="animationDuration" min="4" max="20" value="8" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Random Seed (optional)</label>
+                    <input type="number" id="randomSeed" placeholder="Leave empty for random">
+                </div>
+
+                <div class="divider"></div>
+
+                <button class="btn btn-primary" id="runBtn">Run Simulation</button>
+
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+            </div>
+
+            <div class="canvas-area">
+                <div class="canvas-header">
+                    <h2>Simulation Preview</h2>
+                    <div class="time-display">
+                        <span id="currentTime">0.00</span>s / <span id="totalTime">8.00</span>s
+                    </div>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <canvas id="simulationCanvas" width="300" height="300"></canvas>
+                </div>
+
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-bar-fill" id="progressFill"></div>
+                </div>
+
+                <div class="playback-controls">
+                    <button id="playPauseBtn">▶ Play</button>
+                    <button id="restartBtn">↺ Restart</button>
+                    <button id="stepBtn">⏭ Step</button>
+
+                    <div class="speed-control">
+                        <label>Speed: <span id="playbackSpeedValue">1</span>x</label>
+                        <input type="range" id="playbackSpeed" min="0.25" max="3" value="1" step="0.25">
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-dot no2"></div>
+                        <span>NO<sub>2</sub></span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot n2o4"></div>
+                        <span>N<sub>2</sub>O<sub>4</sub></span>
+                    </div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-box no2">
+                        <div class="value" id="activeNo2">0</div>
+                        <div class="label">Active NO<sub>2</sub></div>
+                    </div>
+                    <div class="stat-box n2o4">
+                        <div class="value" id="activeN2o4">0</div>
+                        <div class="label">Active N<sub>2</sub>O<sub>4</sub></div>
+                    </div>
+                    <div class="stat-box collisions">
+                        <div class="value" id="collisionCount">0</div>
+                        <div class="label">Collisions</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Tables Section -->
+        <div class="data-section" id="dataSection">
+            <h2>Animation <span>Keyframe Data</span></h2>
+
+            <div class="collision-table-wrapper">
+                <h3>Collision Events</h3>
+                <table class="data-table" id="collisionTable">
+                    <thead>
+                        <tr>
+                            <th>Time (s)</th>
+                            <th>Position (x, y)</th>
+                            <th>Particles Destroyed</th>
+                            <th></th>
+                            <th>Particle Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="collisionTableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="trajectories-wrapper">
+                <h3>Particle Trajectories</h3>
+                <button class="copy-btn" id="copyAllBtn">Copy All Data as CSV</button>
+                <div id="particleTrajectories">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // SIMULATION ENGINE (Ported from Python)
+        // ============================================================
+
+        // Seeded random number generator (Mulberry32)
+        function createRng(seed) {
+            if (seed === null || seed === undefined) {
+                seed = Math.floor(Math.random() * 2147483647);
+            }
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+
+        let rng = createRng(null);
+
+        function randomUniform(min, max) {
+            return min + rng() * (max - min);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Normalize velocity to given speed
+        function normalizeVelocity(vx, vy, speed) {
+            const magnitude = Math.sqrt(vx * vx + vy * vy);
+            if (magnitude === 0) {
+                const angle = randomUniform(0, 2 * Math.PI);
+                return [speed * Math.cos(angle), speed * Math.sin(angle)];
+            }
+            return [(vx / magnitude) * speed, (vy / magnitude) * speed];
+        }
+
+        // Generate random velocity with given speed
+        function randomVelocity(speed) {
+            const angle = randomUniform(0, 2 * Math.PI);
+            return [speed * Math.cos(angle), speed * Math.sin(angle)];
+        }
+
+        // Calculate time until particle hits a wall
+        function calculateTimeToWall(x, y, vx, vy, width, height) {
+            const times = [];
+            
+            if (vx < 0) times.push({ t: -x / vx, wall: 'left' });
+            if (vx > 0) times.push({ t: (width - x) / vx, wall: 'right' });
+            if (vy < 0) times.push({ t: -y / vy, wall: 'bottom' });
+            if (vy > 0) times.push({ t: (height - y) / vy, wall: 'top' });
+            
+            const validTimes = times.filter(item => item.t > 1e-10);
+            if (validTimes.length === 0) {
+                return { t: Infinity, wall: 'none' };
+            }
+            
+            return validTimes.reduce((min, item) => item.t < min.t ? item : min);
+        }
+
+        // Reflect velocity based on wall hit
+        function reflectVelocity(vx, vy, wall) {
+            if (wall === 'left' || wall === 'right') return [-vx, vy];
+            if (wall === 'top' || wall === 'bottom') return [vx, -vy];
+            return [vx, vy];
+        }
+
+        // Calculate forward trajectory with wall bounces
+        function calculateForwardTrajectory(startX, startY, vx, vy, startTime, endTime, width, height, speed) {
+            const keyframes = [{ x: startX, y: startY, time: startTime }];
+            
+            let currentX = startX, currentY = startY;
+            let [currentVx, currentVy] = normalizeVelocity(vx, vy, speed);
+            let currentTime = startTime;
+            
+            while (currentTime < endTime) {
+                const { t: timeToWall, wall } = calculateTimeToWall(currentX, currentY, currentVx, currentVy, width, height);
+                const remainingTime = endTime - currentTime;
+                
+                if (timeToWall >= remainingTime) {
+                    const finalX = currentX + currentVx * remainingTime;
+                    const finalY = currentY + currentVy * remainingTime;
+                    keyframes.push({ x: finalX, y: finalY, time: endTime });
+                    break;
+                } else {
+                    currentX += currentVx * timeToWall;
+                    currentY += currentVy * timeToWall;
+                    currentTime += timeToWall;
+                    
+                    currentX = Math.max(0, Math.min(width, currentX));
+                    currentY = Math.max(0, Math.min(height, currentY));
+                    
+                    keyframes.push({ x: currentX, y: currentY, time: currentTime });
+                    [currentVx, currentVy] = reflectVelocity(currentVx, currentVy, wall);
+                }
+            }
+            
+            return keyframes;
+        }
+
+        // Calculate backward trajectory (trace where particle came from)
+        function calculateBackwardTrajectory(endX, endY, vx, vy, endTime, startTime, width, height, speed) {
+            const reverseVx = -vx, reverseVy = -vy;
+            const keyframes = [{ x: endX, y: endY, time: endTime }];
+            
+            let currentX = endX, currentY = endY;
+            let [currentVx, currentVy] = normalizeVelocity(reverseVx, reverseVy, speed);
+            let currentTime = endTime;
+            
+            while (currentTime > startTime) {
+                const { t: timeToWall, wall } = calculateTimeToWall(currentX, currentY, currentVx, currentVy, width, height);
+                const remainingTime = currentTime - startTime;
+                
+                if (timeToWall >= remainingTime) {
+                    const initialX = currentX + currentVx * remainingTime;
+                    const initialY = currentY + currentVy * remainingTime;
+                    keyframes.push({ x: initialX, y: initialY, time: startTime });
+                    break;
+                } else {
+                    currentX += currentVx * timeToWall;
+                    currentY += currentVy * timeToWall;
+                    currentTime -= timeToWall;
+                    
+                    currentX = Math.max(0, Math.min(width, currentX));
+                    currentY = Math.max(0, Math.min(height, currentY));
+                    
+                    keyframes.push({ x: currentX, y: currentY, time: currentTime });
+                    [currentVx, currentVy] = reflectVelocity(currentVx, currentVy, wall);
+                }
+            }
+            
+            keyframes.reverse();
+            return keyframes;
+        }
+
+        // Average two velocities
+        function averageVelocity(vx1, vy1, vx2, vy2, speed) {
+            let avgVx = (vx1 + vx2) / 2;
+            let avgVy = (vy1 + vy2) / 2;
+            
+            if (Math.abs(avgVx) < 1e-10 && Math.abs(avgVy) < 1e-10) {
+                return randomVelocity(speed);
+            }
+            
+            return normalizeVelocity(avgVx, avgVy, speed);
+        }
+
+        // Run the full simulation
+        function runSimulation(params) {
+            const {
+                containerWidth,
+                containerHeight,
+                numParticles,
+                numCollisions,
+                particleSpeed,
+                animationDuration,
+                randomSeed,
+                collisionMargin = 20
+            } = params;
+            
+            // Initialize RNG
+            rng = createRng(randomSeed);
+            
+            // Schedule collision times
+            const timeMargin = animationDuration * 0.1;
+            const availableDuration = animationDuration - (2 * timeMargin);
+            
+            let collisionTimes;
+            if (numCollisions === 1) {
+                collisionTimes = [animationDuration / 2];
+            } else {
+                const timeStep = availableDuration / (numCollisions - 1);
+                collisionTimes = [];
+                for (let i = 0; i < numCollisions; i++) {
+                    collisionTimes.push(timeMargin + i * timeStep);
+                }
+            }
+            
+            // Assign particles to collisions
+            const particleIds = [];
+            for (let i = 1; i <= numParticles; i++) {
+                particleIds.push(i);
+            }
+            shuffleArray(particleIds);
+            
+            const collidingIds = particleIds.slice(0, numCollisions * 2);
+            const nonCollidingIds = particleIds.slice(numCollisions * 2);
+            
+            // Create collisions
+            const collisions = [];
+            for (let i = 0; i < numCollisions; i++) {
+                collisions.push({
+                    id: i + 1,
+                    time: collisionTimes[i],
+                    x: randomUniform(collisionMargin, containerWidth - collisionMargin),
+                    y: randomUniform(collisionMargin, containerHeight - collisionMargin),
+                    particle1_id: collidingIds[i * 2],
+                    particle2_id: collidingIds[i * 2 + 1],
+                    result_particle_id: null
+                });
+            }
+            
+            // Create particles
+            const particles = [];
+            let nextN2O4Id = numParticles + 1;
+            
+            // Create colliding particles
+            for (const collision of collisions) {
+                const angle1 = randomUniform(0, 2 * Math.PI);
+                const angle2 = angle1 + Math.PI + randomUniform(-Math.PI / 3, Math.PI / 3);
+                
+                const vx1 = particleSpeed * Math.cos(angle1);
+                const vy1 = particleSpeed * Math.sin(angle1);
+                const vx2 = particleSpeed * Math.cos(angle2);
+                const vy2 = particleSpeed * Math.sin(angle2);
+                
+                // Backward trajectories for NO2 particles
+                const keyframes1 = calculateBackwardTrajectory(
+                    collision.x, collision.y, vx1, vy1,
+                    collision.time, 0.0,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                const keyframes2 = calculateBackwardTrajectory(
+                    collision.x, collision.y, vx2, vy2,
+                    collision.time, 0.0,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                particles.push({
+                    id: collision.particle1_id,
+                    type: 'NO2',
+                    keyframes: keyframes1,
+                    start_time: 0.0,
+                    end_time: collision.time,
+                    collision_id: collision.id,
+                    velocity: [vx1, vy1]
+                });
+                
+                particles.push({
+                    id: collision.particle2_id,
+                    type: 'NO2',
+                    keyframes: keyframes2,
+                    start_time: 0.0,
+                    end_time: collision.time,
+                    collision_id: collision.id,
+                    velocity: [vx2, vy2]
+                });
+                
+                // Forward trajectory for N2O4
+                const [n2o4Vx, n2o4Vy] = averageVelocity(vx1, vy1, vx2, vy2, particleSpeed);
+                const n2o4Keyframes = calculateForwardTrajectory(
+                    collision.x, collision.y, n2o4Vx, n2o4Vy,
+                    collision.time, animationDuration,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                collision.result_particle_id = nextN2O4Id;
+                
+                particles.push({
+                    id: nextN2O4Id,
+                    type: 'N2O4',
+                    keyframes: n2o4Keyframes,
+                    start_time: collision.time,
+                    end_time: animationDuration,
+                    collision_id: collision.id,
+                    velocity: [n2o4Vx, n2o4Vy]
+                });
+                
+                nextN2O4Id++;
+            }
+            
+            // Create non-colliding particles
+            for (const particleId of nonCollidingIds) {
+                const margin = 10;
+                const startX = randomUniform(margin, containerWidth - margin);
+                const startY = randomUniform(margin, containerHeight - margin);
+                const [vx, vy] = randomVelocity(particleSpeed);
+                
+                const keyframes = calculateForwardTrajectory(
+                    startX, startY, vx, vy,
+                    0.0, animationDuration,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                particles.push({
+                    id: particleId,
+                    type: 'NO2',
+                    keyframes: keyframes,
+                    start_time: 0.0,
+                    end_time: animationDuration,
+                    collision_id: null,
+                    velocity: [vx, vy]
+                });
+            }
+            
+            // Sort particles
+            particles.sort((a, b) => {
+                if (a.type !== b.type) return a.type === 'NO2' ? -1 : 1;
+                return a.id - b.id;
+            });
+            
+            return {
+                success: true,
+                params: {
+                    container_width: containerWidth,
+                    container_height: containerHeight,
+                    animation_duration: animationDuration
+                },
+                particles: particles,
+                collisions: collisions,
+                summary: {
+                    total_particles: particles.length,
+                    no2_count: particles.filter(p => p.type === 'NO2').length,
+                    n2o4_count: particles.filter(p => p.type === 'N2O4').length,
+                    collision_count: collisions.length
+                }
+            };
+        }
+
+        // ============================================================
+        // UI CODE
+        // ============================================================
+
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const containerSizeInput = document.getElementById('containerSize');
+        const numParticlesInput = document.getElementById('numParticles');
+        const numCollisionsInput = document.getElementById('numCollisions');
+        const particleSpeedInput = document.getElementById('particleSpeed');
+        const animationDurationInput = document.getElementById('animationDuration');
+        const randomSeedInput = document.getElementById('randomSeed');
+        const runBtn = document.getElementById('runBtn');
+
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const stepBtn = document.getElementById('stepBtn');
+        const playbackSpeedInput = document.getElementById('playbackSpeed');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        const currentTimeDisplay = document.getElementById('currentTime');
+        const totalTimeDisplay = document.getElementById('totalTime');
+        const errorMessage = document.getElementById('errorMessage');
+
+        let simulationData = null;
+        let currentTime = 0;
+        let isPlaying = false;
+        let playbackSpeed = 1;
+        let lastFrameTime = null;
+        let animationId = null;
+
+        const NO2_COLOR = '#e94560';
+        const N2O4_COLOR = '#4ecdc4';
+        const PARTICLE_RADIUS = 6;
+
+        function updateDisplayValues() {
+            document.getElementById('containerSizeValue').textContent = containerSizeInput.value;
+            document.getElementById('containerSizeValue2').textContent = containerSizeInput.value;
+            document.getElementById('numParticlesValue').textContent = numParticlesInput.value;
+            document.getElementById('numCollisionsValue').textContent = numCollisionsInput.value;
+            document.getElementById('particleSpeedValue').textContent = particleSpeedInput.value;
+            document.getElementById('animationDurationValue').textContent = animationDurationInput.value;
+            document.getElementById('playbackSpeedValue').textContent = playbackSpeedInput.value;
+
+            const maxCollisions = Math.floor(numParticlesInput.value / 2);
+            numCollisionsInput.max = maxCollisions;
+            if (parseInt(numCollisionsInput.value) > maxCollisions) {
+                numCollisionsInput.value = maxCollisions;
+                document.getElementById('numCollisionsValue').textContent = maxCollisions;
+            }
+
+            const size = parseInt(containerSizeInput.value);
+            canvas.width = size;
+            canvas.height = size;
+
+            if (simulationData) {
+                draw();
+            }
+        }
+
+        [containerSizeInput, numParticlesInput, numCollisionsInput, particleSpeedInput, animationDurationInput].forEach(input => {
+            input.addEventListener('input', updateDisplayValues);
+        });
+
+        playbackSpeedInput.addEventListener('input', () => {
+            playbackSpeed = parseFloat(playbackSpeedInput.value);
+            document.getElementById('playbackSpeedValue').textContent = playbackSpeed;
+        });
+
+        progressBar.addEventListener('click', (e) => {
+            if (!simulationData) return;
+            const rect = progressBar.getBoundingClientRect();
+            const ratio = (e.clientX - rect.left) / rect.width;
+            currentTime = ratio * simulationData.params.animation_duration;
+            draw();
+            updateTimeDisplay();
+        });
+
+        runBtn.addEventListener('click', () => {
+            runBtn.disabled = true;
+            runBtn.textContent = 'Running...';
+            errorMessage.style.display = 'none';
+
+            try {
+                const params = {
+                    containerWidth: parseInt(containerSizeInput.value),
+                    containerHeight: parseInt(containerSizeInput.value),
+                    numParticles: parseInt(numParticlesInput.value),
+                    numCollisions: parseInt(numCollisionsInput.value),
+                    particleSpeed: parseInt(particleSpeedInput.value),
+                    animationDuration: parseInt(animationDurationInput.value),
+                    randomSeed: randomSeedInput.value ? parseInt(randomSeedInput.value) : null
+                };
+
+                if (params.numCollisions * 2 > params.numParticles) {
+                    throw new Error(`Cannot have ${params.numCollisions} collisions with only ${params.numParticles} particles.`);
+                }
+
+                simulationData = runSimulation(params);
+                currentTime = 0;
+                totalTimeDisplay.textContent = simulationData.params.animation_duration.toFixed(2);
+                
+                isPlaying = false;
+                playPauseBtn.textContent = '▶ Play';
+                playPauseBtn.classList.remove('active');
+
+                draw();
+                updateTimeDisplay();
+                populateDataTables();
+
+            } catch (err) {
+                errorMessage.textContent = err.message;
+                errorMessage.style.display = 'block';
+            } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run Simulation';
+            }
+        });
+
+        playPauseBtn.addEventListener('click', () => {
+            if (!simulationData) return;
+            isPlaying = !isPlaying;
+            playPauseBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+            playPauseBtn.classList.toggle('active', isPlaying);
+            
+            if (isPlaying) {
+                lastFrameTime = performance.now();
+                animate();
+            }
+        });
+
+        restartBtn.addEventListener('click', () => {
+            currentTime = 0;
+            draw();
+            updateTimeDisplay();
+        });
+
+        stepBtn.addEventListener('click', () => {
+            if (!simulationData) return;
+            currentTime = Math.min(currentTime + 0.1, simulationData.params.animation_duration);
+            draw();
+            updateTimeDisplay();
+        });
+
+        function animate() {
+            if (!isPlaying || !simulationData) return;
+
+            const now = performance.now();
+            const delta = (now - lastFrameTime) / 1000;
+            lastFrameTime = now;
+
+            currentTime += delta * playbackSpeed;
+
+            if (currentTime >= simulationData.params.animation_duration) {
+                currentTime = simulationData.params.animation_duration;
+                isPlaying = false;
+                playPauseBtn.textContent = '▶ Play';
+                playPauseBtn.classList.remove('active');
+            }
+
+            draw();
+            updateTimeDisplay();
+
+            if (isPlaying) {
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+
+        function updateTimeDisplay() {
+            if (!simulationData) return;
+            currentTimeDisplay.textContent = currentTime.toFixed(2);
+            const progress = (currentTime / simulationData.params.animation_duration) * 100;
+            progressFill.style.width = `${progress}%`;
+        }
+
+        function getParticlePosition(particle, time) {
+            if (time < particle.start_time || time > particle.end_time) {
+                return null;
+            }
+
+            const keyframes = particle.keyframes;
+            
+            for (let i = 0; i < keyframes.length - 1; i++) {
+                const kf1 = keyframes[i];
+                const kf2 = keyframes[i + 1];
+
+                if (time >= kf1.time && time <= kf2.time) {
+                    const t = (time - kf1.time) / (kf2.time - kf1.time);
+                    return {
+                        x: kf1.x + t * (kf2.x - kf1.x),
+                        y: kf1.y + t * (kf2.y - kf1.y)
+                    };
+                }
+            }
+
+            if (keyframes.length > 0) {
+                const last = keyframes[keyframes.length - 1];
+                if (Math.abs(time - last.time) < 0.01) {
+                    return { x: last.x, y: last.y };
+                }
+            }
+
+            return null;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!simulationData) {
+                ctx.fillStyle = '#333';
+                ctx.font = '14px Segoe UI';
+                ctx.textAlign = 'center';
+                ctx.fillText('Click "Run Simulation" to start', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            const particles = simulationData.particles;
+            let activeNo2 = 0;
+            let activeN2o4 = 0;
+            let collisionsSoFar = 0;
+
+            for (const collision of simulationData.collisions) {
+                if (currentTime >= collision.time) {
+                    collisionsSoFar++;
+                }
+            }
+
+            for (const collision of simulationData.collisions) {
+                const timeSinceCollision = currentTime - collision.time;
+                if (timeSinceCollision >= 0 && timeSinceCollision < 0.3) {
+                    const alpha = 1 - (timeSinceCollision / 0.3);
+                    const radius = PARTICLE_RADIUS * 2 + timeSinceCollision * 50;
+                    
+                    ctx.beginPath();
+                    ctx.arc(collision.x, collision.y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.4})`;
+                    ctx.fill();
+                }
+            }
+
+            for (const particle of particles) {
+                const pos = getParticlePosition(particle, currentTime);
+                if (!pos) continue;
+
+                const isNo2 = particle.type === 'NO2';
+                const color = isNo2 ? NO2_COLOR : N2O4_COLOR;
+                const radius = isNo2 ? PARTICLE_RADIUS : PARTICLE_RADIUS * 1.3;
+
+                if (isNo2) activeNo2++;
+                else activeN2o4++;
+
+                const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(0.5, color + '80');
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fill();
+            }
+
+            document.getElementById('activeNo2').textContent = activeNo2;
+            document.getElementById('activeN2o4').textContent = activeN2o4;
+            document.getElementById('collisionCount').textContent = collisionsSoFar;
+        }
+
+        function populateDataTables() {
+            if (!simulationData) return;
+
+            document.getElementById('dataSection').classList.add('visible');
+
+            const collisionBody = document.getElementById('collisionTableBody');
+            collisionBody.innerHTML = '';
+
+            for (const collision of simulationData.collisions) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${collision.time.toFixed(3)}</td>
+                    <td>(${collision.x.toFixed(1)}, ${collision.y.toFixed(1)})</td>
+                    <td>
+                        <span class="particle-badge no2">NO₂ #${collision.particle1_id}</span>
+                        <span class="particle-badge no2">NO₂ #${collision.particle2_id}</span>
+                    </td>
+                    <td class="arrow">→</td>
+                    <td>
+                        <span class="particle-badge n2o4">N₂O₄ #${collision.result_particle_id}</span>
+                    </td>
+                `;
+                collisionBody.appendChild(row);
+            }
+
+            const trajContainer = document.getElementById('particleTrajectories');
+            trajContainer.innerHTML = '';
+
+            const sortedParticles = [...simulationData.particles].sort((a, b) => {
+                if (a.type !== b.type) return a.type === 'NO2' ? -1 : 1;
+                return a.id - b.id;
+            });
+
+            for (const particle of sortedParticles) {
+                const isNo2 = particle.type === 'NO2';
+                const typeClass = isNo2 ? 'no2' : 'n2o4';
+                const typeName = isNo2 ? 'NO₂' : 'N₂O₄';
+                
+                let collisionInfo = '';
+                if (isNo2) {
+                    const collision = simulationData.collisions.find(
+                        c => c.particle1_id === particle.id || c.particle2_id === particle.id
+                    );
+                    if (collision) {
+                        collisionInfo = `Collides at t=${collision.time.toFixed(2)}s → N₂O₄ #${collision.result_particle_id}`;
+                    } else {
+                        collisionInfo = 'No collision';
+                    }
+                } else {
+                    const collision = simulationData.collisions.find(c => c.result_particle_id === particle.id);
+                    if (collision) {
+                        collisionInfo = `Created from NO₂ #${collision.particle1_id} + #${collision.particle2_id}`;
+                    }
+                }
+
+                const group = document.createElement('div');
+                group.className = 'particle-group';
+                group.innerHTML = `
+                    <div class="particle-header" onclick="toggleParticle(this)">
+                        <div class="particle-info">
+                            <span class="particle-id ${typeClass}">${typeName} #${particle.id}</span>
+                            <span class="particle-meta">${particle.keyframes.length} keyframes • ${particle.start_time.toFixed(2)}s - ${particle.end_time.toFixed(2)}s</span>
+                        </div>
+                        <div class="particle-meta">${collisionInfo}</div>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                    <div class="particle-keyframes">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Time (s)</th>
+                                    <th>X (px)</th>
+                                    <th>Y (px)</th>
+                                    <th>Duration to Next (s)</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${particle.keyframes.map((kf, idx) => {
+                                    const duration = idx < particle.keyframes.length - 1 
+                                        ? (particle.keyframes[idx + 1].time - kf.time).toFixed(4)
+                                        : '—';
+                                    
+                                    let note = '';
+                                    let highlightClass = '';
+                                    if (idx === 0) {
+                                        note = isNo2 ? 'Start' : 'Created (collision)';
+                                        highlightClass = 'keyframe-highlight';
+                                    } else if (idx === particle.keyframes.length - 1) {
+                                        if (isNo2 && particle.end_time < simulationData.params.animation_duration) {
+                                            note = 'Destroyed (collision)';
+                                            highlightClass = 'keyframe-highlight';
+                                        } else {
+                                            note = 'End';
+                                        }
+                                    } else {
+                                        const atLeftWall = kf.x <= 1;
+                                        const atRightWall = kf.x >= simulationData.params.container_width - 1;
+                                        const atTopWall = kf.y >= simulationData.params.container_height - 1;
+                                        const atBottomWall = kf.y <= 1;
+                                        if (atLeftWall || atRightWall || atTopWall || atBottomWall) {
+                                            note = 'Wall bounce';
+                                        }
+                                    }
+                                    
+                                    return `
+                                        <tr class="${highlightClass}">
+                                            <td>${idx}</td>
+                                            <td>${kf.time.toFixed(4)}</td>
+                                            <td>${kf.x.toFixed(2)}</td>
+                                            <td>${kf.y.toFixed(2)}</td>
+                                            <td>${duration}</td>
+                                            <td><span class="collision-note">${note}</span></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                trajContainer.appendChild(group);
+            }
+        }
+
+        function toggleParticle(header) {
+            header.classList.toggle('expanded');
+            const keyframes = header.nextElementSibling;
+            keyframes.classList.toggle('expanded');
+        }
+
+        document.getElementById('copyAllBtn').addEventListener('click', () => {
+            if (!simulationData) return;
+
+            let csv = 'particle_id,particle_type,keyframe_idx,x,y,time_sec,duration_to_next\n';
+            
+            for (const particle of simulationData.particles) {
+                for (let i = 0; i < particle.keyframes.length; i++) {
+                    const kf = particle.keyframes[i];
+                    const duration = i < particle.keyframes.length - 1 
+                        ? (particle.keyframes[i + 1].time - kf.time).toFixed(4)
+                        : '0';
+                    csv += `${particle.id},${particle.type},${i},${kf.x.toFixed(2)},${kf.y.toFixed(2)},${kf.time.toFixed(4)},${duration}\n`;
+                }
+            }
+
+            navigator.clipboard.writeText(csv).then(() => {
+                const btn = document.getElementById('copyAllBtn');
+                btn.textContent = '✓ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy All Data as CSV';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        });
+
+        updateDisplayValues();
+        draw();
+    </script>
+</body>
+</html>
+

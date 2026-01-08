@@ -1,0 +1,124 @@
+================================================================================
+PARTICLE COLLISION SIMULATOR - How To Guide
+================================================================================
+
+QUICK START (Local Development)
+--------------------------------------------------------------------------------
+1. Open a terminal/command prompt
+2. Navigate to the project folder:
+   cd "C:\Users\BGROSS\OneDrive - Educational Testing Service\ETS\California\tasks\air quality\particle-simulation-planning"
+
+3. Start the Flask server:
+   python app.py
+
+4. Open your browser to:
+   http://localhost:5000
+
+5. To stop the server, press Ctrl+C in the terminal
+
+
+INSTALLING DEPENDENCIES (First Time Setup)
+--------------------------------------------------------------------------------
+pip install -r requirements.txt
+
+Or install individually:
+pip install numpy matplotlib pandas flask
+
+
+COMMAND LINE SIMULATION (Without Web Interface)
+--------------------------------------------------------------------------------
+Run simulation and export CSV files:
+   python main.py
+
+Show animated preview (matplotlib):
+   python main.py --preview
+
+Show static trajectory plot:
+   python main.py --static
+
+Save animation as GIF:
+   python main.py --save-gif animation.gif
+
+Custom parameters:
+   python main.py -p 12 -c 4 -d 10 -s 100 --preview
+
+   Options:
+   -p, --particles    Number of NO2 particles (default: 15)
+   -c, --collisions   Number of collisions (default: 6)
+   -d, --duration     Animation duration in seconds (default: 8)
+   -s, --speed        Particle speed in px/sec (default: 80)
+   -W, --width        Container width in px (default: 300)
+   -H, --height       Container height in px (default: 300)
+   --seed             Random seed for reproducibility
+   -v, --verbose      Print detailed keyframe preview
+
+Full help:
+   python main.py --help
+
+
+OUTPUT FILES
+--------------------------------------------------------------------------------
+After running the simulation, these CSV files are generated:
+
+- particle_keyframes.csv   : All keyframe data for Rive animation
+- collisions.csv           : Collision events with particle IDs
+- particle_summary.csv     : Summary of each particle's trajectory
+
+
+CONFIGURATION
+--------------------------------------------------------------------------------
+Edit config.py to change default simulation parameters:
+
+- CONTAINER_WIDTH, CONTAINER_HEIGHT  : Container size in pixels
+- NUM_PARTICLES                      : Number of NO2 particles
+- NUM_COLLISIONS                     : Number of collisions to occur
+- PARTICLE_SPEED                     : Speed in pixels/second
+- ANIMATION_DURATION                 : Total duration in seconds
+- RANDOM_SEED                        : Set for reproducible results
+
+
+GITHUB PAGES (Static Site)
+--------------------------------------------------------------------------------
+The /docs folder contains a standalone static version that runs entirely
+in the browser (no Python server needed).
+
+To use GitHub Pages:
+1. Push this repo to GitHub
+2. Go to Settings > Pages
+3. Set Source to "Deploy from a branch"
+4. Select "main" branch and "/docs" folder
+5. Save - your site will be live at:
+   https://[username].github.io/[repo-name]/
+
+
+PROJECT STRUCTURE
+--------------------------------------------------------------------------------
+├── app.py                 : Flask web server
+├── main.py                : Command-line entry point
+├── config.py              : Default parameters
+├── simulation.py          : Main simulation orchestrator
+├── collision_scheduler.py : Collision timing and trajectory calculation
+├── trajectory.py          : Wall bounce and path calculation
+├── particle.py            : Particle and collision data classes
+├── export.py              : CSV export utilities
+├── preview.py             : Matplotlib animation preview
+├── templates/
+│   └── index.html         : Web interface (requires Flask)
+├── docs/
+│   └── index.html         : Standalone static site (GitHub Pages)
+└── requirements.txt       : Python dependencies
+
+
+TROUBLESHOOTING
+--------------------------------------------------------------------------------
+"Module not found" error:
+   Run: pip install -r requirements.txt
+
+Port 5000 already in use:
+   Edit app.py and change port=5000 to another port (e.g., 5001)
+
+Unicode/encoding errors on Windows:
+   The arrow character → has been replaced with -> for compatibility
+
+================================================================================
+
