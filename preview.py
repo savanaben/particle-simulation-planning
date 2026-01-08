@@ -339,3 +339,4 @@ def preview_from_config(result: SimulationResult) -> SimulationPreview:
         particle_radius=config.PARTICLE_RADIUS
     )
 
+

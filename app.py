@@ -3,9 +3,10 @@ Flask web application for interactive particle simulation.
 No database - simulation runs in memory and returns JSON.
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 from simulation import Simulation
 from particle import ParticleType
+import os
 
 app = Flask(__name__)
 
@@ -14,6 +15,12 @@ app = Flask(__name__)
 def index():
     """Serve the main page."""
     return render_template('index.html')
+
+
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    """Serve static files from docs folder."""
+    return send_from_directory(os.path.join(os.path.dirname(__file__), 'docs'), filename)
 
 
 @app.route('/api/simulate', methods=['POST'])
@@ -115,4 +122,5 @@ if __name__ == '__main__':
     print("Starting Particle Simulation Server...")
     print("Open http://localhost:5000 in your browser")
     app.run(debug=True, port=5000)
+
 

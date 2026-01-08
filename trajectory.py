@@ -207,3 +207,4 @@ def average_velocity(vx1: float, vy1: float, vx2: float, vy2: float, speed: floa
     
     return normalize_velocity(avg_vx, avg_vy, speed)
 
+

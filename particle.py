@@ -116,3 +116,4 @@ class Collision:
     particle2_id: int
     result_particle_id: Optional[int] = None
 
+

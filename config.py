@@ -31,3 +31,4 @@ NO2_COLOR = "#E74C3C"  # Red for NO2 particles
 N2O4_COLOR = "#3498DB"  # Blue for N2O4 particles
 PARTICLE_RADIUS = 6  # Visual radius for preview (not used in collision detection)
 
+

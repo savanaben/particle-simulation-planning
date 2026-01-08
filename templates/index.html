@@ -581,6 +581,39 @@
             border-color: #4ecdc4;
             color: #4ecdc4;
         }
+
+        /* Click-to-copy cells */
+        .copyable {
+            cursor: pointer;
+            position: relative;
+            transition: background 0.15s;
+        }
+
+        .copyable:hover {
+            background: rgba(78, 205, 196, 0.15) !important;
+        }
+
+        .copyable.copied {
+            background: rgba(78, 205, 196, 0.3) !important;
+        }
+
+        .copyable.copied::after {
+            content: '✓';
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4ecdc4;
+            font-size: 0.7rem;
+        }
+
+        /* Time format helper text */
+        .time-format-note {
+            font-size: 0.7rem;
+            color: #666;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -708,10 +741,11 @@
             <!-- Collision Events -->
             <div class="collision-table-wrapper">
                 <h3>Collision Events</h3>
+                <p class="time-format-note">Time format: seconds:frames (60fps). Click time cells to copy.</p>
                 <table class="data-table" id="collisionTable">
                     <thead>
                         <tr>
-                            <th>Time (s)</th>
+                            <th>Time (s:f)</th>
                             <th>Position (x, y)</th>
                             <th>Particles Destroyed</th>
                             <th></th>
@@ -773,6 +807,39 @@
         const NO2_COLOR = '#e94560';
         const N2O4_COLOR = '#4ecdc4';
         const PARTICLE_RADIUS = 6;
+
+        // SVG images for particles
+        const no2Image = new Image();
+        const n2o4Image = new Image();
+        let imagesLoaded = 0;
+        const IMAGE_HEIGHT = 24; // Target height for all particles
+        
+        // SVG aspect ratios (from viewBox dimensions)
+        const NO2_ASPECT = 21.06 / 22.39; // width/height
+        const N2O4_ASPECT = 41.12 / 22.39; // width/height
+        
+        // Calculate widths based on aspect ratios
+        const NO2_WIDTH = IMAGE_HEIGHT * NO2_ASPECT;
+        const N2O4_WIDTH = IMAGE_HEIGHT * N2O4_ASPECT;
+        
+        // Store random starting rotations per particle
+        const particleRotations = new Map();
+
+        // Offscreen canvas for applying brightness effects
+        const offscreenCanvas = document.createElement('canvas');
+        const offscreenCtx = offscreenCanvas.getContext('2d');
+
+        // Load SVG images
+        no2Image.onload = () => {
+            imagesLoaded++;
+            if (imagesLoaded === 2) draw();
+        };
+        n2o4Image.onload = () => {
+            imagesLoaded++;
+            if (imagesLoaded === 2) draw();
+        };
+        no2Image.src = '/static/no2.svg';
+        n2o4Image.src = '/static/n2o4.svg';
 
         // Update display values
         function updateDisplayValues() {
@@ -855,6 +922,9 @@
                 simulationData = data;
                 currentTime = 0;
                 totalTimeDisplay.textContent = data.params.animation_duration.toFixed(2);
+                
+                // Clear previous rotations and let new ones be generated on first draw
+                particleRotations.clear();
                 
                 // Reset playback
                 isPlaying = false;
@@ -997,13 +1067,14 @@
             // Draw collision flash effects
             for (const collision of simulationData.collisions) {
                 const timeSinceCollision = currentTime - collision.time;
-                if (timeSinceCollision >= 0 && timeSinceCollision < 0.3) {
-                    const alpha = 1 - (timeSinceCollision / 0.3);
+                if (timeSinceCollision >= 0 && timeSinceCollision < 0.4) {
+                    const alpha = 1 - (timeSinceCollision / 0.4);
                     const radius = PARTICLE_RADIUS * 2 + timeSinceCollision * 50;
                     
                     ctx.beginPath();
                     ctx.arc(collision.x, collision.y, radius, 0, Math.PI * 2);
-                    ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.4})`;
+                    // Brighter yellow with higher opacity
+                    ctx.fillStyle = `rgba(255, 255, 0, ${alpha * 0.75})`;
                     ctx.fill();
                 }
             }
@@ -1014,41 +1085,113 @@
                 if (!pos) continue;
 
                 const isNo2 = particle.type === 'NO2';
-                const color = isNo2 ? NO2_COLOR : N2O4_COLOR;
-                const radius = isNo2 ? PARTICLE_RADIUS : PARTICLE_RADIUS * 1.3;
+                const image = isNo2 ? no2Image : n2o4Image;
+                const width = isNo2 ? NO2_WIDTH : N2O4_WIDTH;
+                const height = IMAGE_HEIGHT;
 
                 // Count active particles
                 if (isNo2) activeNo2++;
                 else activeN2o4++;
 
-                // Glow effect
-                const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2);
-                gradient.addColorStop(0, color);
-                gradient.addColorStop(0.5, color + '80');
-                gradient.addColorStop(1, 'transparent');
+                // Only draw if images are loaded
+                if (imagesLoaded < 2) {
+                    // Fallback to colored circle while loading
+                    const color = isNo2 ? NO2_COLOR : N2O4_COLOR;
+                    const radius = isNo2 ? PARTICLE_RADIUS : PARTICLE_RADIUS * 1.3;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    continue;
+                }
+
+                // Get or initialize random starting rotation for this particle
+                if (!particleRotations.has(particle.id)) {
+                    particleRotations.set(particle.id, Math.random() * 2 * Math.PI);
+                }
+                const startRotation = particleRotations.get(particle.id);
+
+                // Calculate rotation angle (slow continuous rotation + starting rotation)
+                // Rotate 360 degrees every 3 seconds
+                const rotationSpeed = 2 * Math.PI / 3; // radians per second
+                const angle = startRotation + currentTime * rotationSpeed;
+
+                // Draw rotated SVG with optional brightening effect
+                ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.rotate(angle);
                 
-                ctx.beginPath();
-                ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2);
-                ctx.fillStyle = gradient;
-                ctx.fill();
-
-                // Main circle
-                ctx.beginPath();
-                ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-                ctx.fillStyle = color;
-                ctx.fill();
-
-                // Highlight
-                ctx.beginPath();
-                ctx.arc(pos.x - radius * 0.3, pos.y - radius * 0.3, radius * 0.3, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                ctx.fill();
+                // Check if we need brightening effect for N2O4
+                let needsBrightening = false;
+                let brightenAmount = 0;
+                if (!isNo2) {
+                    const timeSinceCreation = currentTime - particle.start_time;
+                    if (timeSinceCreation >= 0 && timeSinceCreation < 0.3) {
+                        needsBrightening = true;
+                        const fadeProgress = 1 - (timeSinceCreation / 0.3);
+                        brightenAmount = fadeProgress * 0.6; // 0 to 0.6 brightness boost
+                    }
+                }
+                
+                if (needsBrightening) {
+                    // Draw to offscreen canvas to manipulate pixels
+                    offscreenCanvas.width = width;
+                    offscreenCanvas.height = height;
+                    offscreenCtx.clearRect(0, 0, width, height);
+                    
+                    // Draw the SVG image
+                    offscreenCtx.drawImage(image, 0, 0, width, height);
+                    
+                    // Get image data and brighten pixels
+                    const imageData = offscreenCtx.getImageData(0, 0, width, height);
+                    const data = imageData.data;
+                    
+                    // Brighten by increasing RGB values (preserving alpha)
+                    for (let i = 0; i < data.length; i += 4) {
+                        // Only brighten non-transparent pixels
+                        if (data[i + 3] > 0) {
+                            // Increase RGB values proportionally
+                            data[i] = Math.min(255, data[i] + brightenAmount * (255 - data[i]));     // R
+                            data[i + 1] = Math.min(255, data[i + 1] + brightenAmount * (255 - data[i + 1])); // G
+                            data[i + 2] = Math.min(255, data[i + 2] + brightenAmount * (255 - data[i + 2])); // B
+                            // Alpha channel (data[i + 3]) stays the same
+                        }
+                    }
+                    
+                    // Put modified image data back
+                    offscreenCtx.putImageData(imageData, 0, 0);
+                    
+                    // Draw the brightened result to main canvas
+                    ctx.drawImage(offscreenCanvas, -width / 2, -height / 2);
+                } else {
+                    // Draw normally
+                    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+                }
+                
+                ctx.restore();
             }
 
             // Update stats
             document.getElementById('activeNo2').textContent = activeNo2;
             document.getElementById('activeN2o4').textContent = activeN2o4;
             document.getElementById('collisionCount').textContent = collisionsSoFar;
+        }
+
+        // Convert seconds to 60fps notation (e.g., 1.5s -> "1:30")
+        function toFrameTime(seconds) {
+            if (seconds === null || seconds === undefined || isNaN(seconds)) return '—';
+            const wholeSecs = Math.floor(seconds);
+            const frames = Math.round((seconds % 1) * 60);
+            return `${wholeSecs}:${frames.toString().padStart(2, '0')}`;
+        }
+
+        // Copy value to clipboard with visual feedback
+        function copyCell(element) {
+            const value = element.getAttribute('data-value') || element.textContent;
+            navigator.clipboard.writeText(value).then(() => {
+                element.classList.add('copied');
+                setTimeout(() => element.classList.remove('copied'), 600);
+            });
         }
 
         // Populate data tables
@@ -1065,7 +1208,7 @@
             for (const collision of simulationData.collisions) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${collision.time.toFixed(3)}</td>
+                    <td class="copyable" onclick="copyCell(this)" data-value="${toFrameTime(collision.time)}">${toFrameTime(collision.time)}</td>
                     <td>(${collision.x.toFixed(1)}, ${collision.y.toFixed(1)})</td>
                     <td>
                         <span class="particle-badge no2">NO₂ #${collision.particle1_id}</span>
@@ -1101,7 +1244,7 @@
                         c => c.particle1_id === particle.id || c.particle2_id === particle.id
                     );
                     if (collision) {
-                        collisionInfo = `Collides at t=${collision.time.toFixed(2)}s → N₂O₄ #${collision.result_particle_id}`;
+                        collisionInfo = `Collides at ${toFrameTime(collision.time)} → N₂O₄ #${collision.result_particle_id}`;
                     } else {
                         collisionInfo = 'No collision';
                     }
@@ -1118,28 +1261,32 @@
                     <div class="particle-header" onclick="toggleParticle(this)">
                         <div class="particle-info">
                             <span class="particle-id ${typeClass}">${typeName} #${particle.id}</span>
-                            <span class="particle-meta">${particle.keyframes.length} keyframes • ${particle.start_time.toFixed(2)}s - ${particle.end_time.toFixed(2)}s</span>
+                            <span class="particle-meta">${particle.keyframes.length} keyframes • ${toFrameTime(particle.start_time)} - ${toFrameTime(particle.end_time)}</span>
                         </div>
                         <div class="particle-meta">${collisionInfo}</div>
                         <span class="toggle-icon">▼</span>
                     </div>
                     <div class="particle-keyframes">
+                        <p class="time-format-note">Time format: seconds:frames (60fps). Click any cell to copy.</p>
                         <table class="data-table">
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <th>Time (s)</th>
+                                    <th>Time (s:f)</th>
                                     <th>X (px)</th>
                                     <th>Y (px)</th>
-                                    <th>Duration to Next (s)</th>
+                                    <th>Duration (s:f)</th>
                                     <th>Notes</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${particle.keyframes.map((kf, idx) => {
-                                    const duration = idx < particle.keyframes.length - 1 
-                                        ? (particle.keyframes[idx + 1].time - kf.time).toFixed(4)
-                                        : '—';
+                                    const durationSec = idx < particle.keyframes.length - 1 
+                                        ? particle.keyframes[idx + 1].time - kf.time
+                                        : null;
+                                    const durationStr = durationSec !== null ? toFrameTime(durationSec) : '—';
+                                    const xVal = kf.x.toFixed(1);
+                                    const yVal = kf.y.toFixed(1);
                                     
                                     // Check if this is a start, end, or wall bounce
                                     let note = '';
@@ -1168,10 +1315,10 @@
                                     return `
                                         <tr class="${highlightClass}">
                                             <td>${idx}</td>
-                                            <td>${kf.time.toFixed(4)}</td>
-                                            <td>${kf.x.toFixed(2)}</td>
-                                            <td>${kf.y.toFixed(2)}</td>
-                                            <td>${duration}</td>
+                                            <td class="copyable" onclick="copyCell(this)" data-value="${toFrameTime(kf.time)}">${toFrameTime(kf.time)}</td>
+                                            <td class="copyable" onclick="copyCell(this)" data-value="${xVal}">${xVal}</td>
+                                            <td class="copyable" onclick="copyCell(this)" data-value="${yVal}">${yVal}</td>
+                                            <td class="copyable" onclick="copyCell(this)" data-value="${durationStr}">${durationStr}</td>
                                             <td><span class="collision-note">${note}</span></td>
                                         </tr>
                                     `;
@@ -1195,15 +1342,15 @@
         document.getElementById('copyAllBtn').addEventListener('click', () => {
             if (!simulationData) return;
 
-            let csv = 'particle_id,particle_type,keyframe_idx,x,y,time_sec,duration_to_next\n';
+            let csv = 'particle_id,particle_type,keyframe_idx,x,y,time_frames,duration_frames\n';
             
             for (const particle of simulationData.particles) {
                 for (let i = 0; i < particle.keyframes.length; i++) {
                     const kf = particle.keyframes[i];
-                    const duration = i < particle.keyframes.length - 1 
-                        ? (particle.keyframes[i + 1].time - kf.time).toFixed(4)
-                        : '0';
-                    csv += `${particle.id},${particle.type},${i},${kf.x.toFixed(2)},${kf.y.toFixed(2)},${kf.time.toFixed(4)},${duration}\n`;
+                    const durationSec = i < particle.keyframes.length - 1 
+                        ? particle.keyframes[i + 1].time - kf.time
+                        : 0;
+                    csv += `${particle.id},${particle.type},${i},${kf.x.toFixed(1)},${kf.y.toFixed(1)},${toFrameTime(kf.time)},${toFrameTime(durationSec)}\n`;
                 }
             }
 

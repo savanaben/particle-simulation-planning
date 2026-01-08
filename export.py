@@ -192,3 +192,4 @@ def print_keyframes_preview(result: SimulationResult, max_particles: int = 3) ->
     if len(result.particles) > max_particles:
         print(f"\n... and {len(result.particles) - max_particles} more particles")
 
+
