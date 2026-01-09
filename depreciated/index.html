@@ -339,27 +339,6 @@
             font-size: 0.85rem;
         }
 
-        /* Loading state */
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-            color: #888;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .loading span {
-            animation: pulse 1.5s infinite;
-        }
-
         /* Data Tables Section */
         .data-section {
             margin-top: 40px;
@@ -383,7 +362,6 @@
             color: #ffd93d;
         }
 
-        /* Collision Events Table */
         .collision-table-wrapper {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
@@ -454,7 +432,6 @@
             padding: 0 8px;
         }
 
-        /* Particle Trajectories */
         .trajectories-wrapper {
             background: rgba(255, 255, 255, 0.03);
             border-radius: 12px;
@@ -558,7 +535,6 @@
             font-style: italic;
         }
 
-        /* Copy button */
         .copy-btn {
             padding: 8px 16px;
             background: rgba(255, 255, 255, 0.05);
@@ -613,6 +589,12 @@
             color: #666;
             margin-bottom: 12px;
             font-style: italic;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
@@ -738,7 +720,6 @@
         <div class="data-section" id="dataSection">
             <h2>Animation <span>Keyframe Data</span></h2>
 
-            <!-- Collision Events -->
             <div class="collision-table-wrapper">
                 <h3>Collision Events</h3>
                 <p class="time-format-note">Time format: seconds:frames (60fps). Click time cells to copy.</p>
@@ -757,23 +738,347 @@
                 </table>
             </div>
 
-            <!-- Particle Trajectories -->
             <div class="trajectories-wrapper">
                 <h3>Particle Trajectories</h3>
                 <button class="copy-btn" id="copyAllBtn">Copy All Data as CSV</button>
                 <div id="particleTrajectories">
-                    <!-- Particle groups will be inserted here -->
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // DOM Elements
+        // ============================================================
+        // SIMULATION ENGINE (Ported from Python)
+        // ============================================================
+
+        // Seeded random number generator (Mulberry32)
+        function createRng(seed) {
+            if (seed === null || seed === undefined) {
+                seed = Math.floor(Math.random() * 2147483647);
+            }
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+
+        let rng = createRng(null);
+
+        function randomUniform(min, max) {
+            return min + rng() * (max - min);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Normalize velocity to given speed
+        function normalizeVelocity(vx, vy, speed) {
+            const magnitude = Math.sqrt(vx * vx + vy * vy);
+            if (magnitude === 0) {
+                const angle = randomUniform(0, 2 * Math.PI);
+                return [speed * Math.cos(angle), speed * Math.sin(angle)];
+            }
+            return [(vx / magnitude) * speed, (vy / magnitude) * speed];
+        }
+
+        // Generate random velocity with given speed
+        function randomVelocity(speed) {
+            const angle = randomUniform(0, 2 * Math.PI);
+            return [speed * Math.cos(angle), speed * Math.sin(angle)];
+        }
+
+        // Calculate time until particle hits a wall
+        function calculateTimeToWall(x, y, vx, vy, width, height) {
+            const times = [];
+            
+            if (vx < 0) times.push({ t: -x / vx, wall: 'left' });
+            if (vx > 0) times.push({ t: (width - x) / vx, wall: 'right' });
+            if (vy < 0) times.push({ t: -y / vy, wall: 'bottom' });
+            if (vy > 0) times.push({ t: (height - y) / vy, wall: 'top' });
+            
+            const validTimes = times.filter(item => item.t > 1e-10);
+            if (validTimes.length === 0) {
+                return { t: Infinity, wall: 'none' };
+            }
+            
+            return validTimes.reduce((min, item) => item.t < min.t ? item : min);
+        }
+
+        // Reflect velocity based on wall hit
+        function reflectVelocity(vx, vy, wall) {
+            if (wall === 'left' || wall === 'right') return [-vx, vy];
+            if (wall === 'top' || wall === 'bottom') return [vx, -vy];
+            return [vx, vy];
+        }
+
+        // Calculate forward trajectory with wall bounces
+        function calculateForwardTrajectory(startX, startY, vx, vy, startTime, endTime, width, height, speed) {
+            const keyframes = [{ x: startX, y: startY, time: startTime }];
+            
+            let currentX = startX, currentY = startY;
+            let [currentVx, currentVy] = normalizeVelocity(vx, vy, speed);
+            let currentTime = startTime;
+            
+            while (currentTime < endTime) {
+                const { t: timeToWall, wall } = calculateTimeToWall(currentX, currentY, currentVx, currentVy, width, height);
+                const remainingTime = endTime - currentTime;
+                
+                if (timeToWall >= remainingTime) {
+                    const finalX = currentX + currentVx * remainingTime;
+                    const finalY = currentY + currentVy * remainingTime;
+                    keyframes.push({ x: finalX, y: finalY, time: endTime });
+                    break;
+                } else {
+                    currentX += currentVx * timeToWall;
+                    currentY += currentVy * timeToWall;
+                    currentTime += timeToWall;
+                    
+                    currentX = Math.max(0, Math.min(width, currentX));
+                    currentY = Math.max(0, Math.min(height, currentY));
+                    
+                    keyframes.push({ x: currentX, y: currentY, time: currentTime });
+                    [currentVx, currentVy] = reflectVelocity(currentVx, currentVy, wall);
+                }
+            }
+            
+            return keyframes;
+        }
+
+        // Calculate backward trajectory (trace where particle came from)
+        function calculateBackwardTrajectory(endX, endY, vx, vy, endTime, startTime, width, height, speed) {
+            const reverseVx = -vx, reverseVy = -vy;
+            const keyframes = [{ x: endX, y: endY, time: endTime }];
+            
+            let currentX = endX, currentY = endY;
+            let [currentVx, currentVy] = normalizeVelocity(reverseVx, reverseVy, speed);
+            let currentTime = endTime;
+            
+            while (currentTime > startTime) {
+                const { t: timeToWall, wall } = calculateTimeToWall(currentX, currentY, currentVx, currentVy, width, height);
+                const remainingTime = currentTime - startTime;
+                
+                if (timeToWall >= remainingTime) {
+                    const initialX = currentX + currentVx * remainingTime;
+                    const initialY = currentY + currentVy * remainingTime;
+                    keyframes.push({ x: initialX, y: initialY, time: startTime });
+                    break;
+                } else {
+                    currentX += currentVx * timeToWall;
+                    currentY += currentVy * timeToWall;
+                    currentTime -= timeToWall;
+                    
+                    currentX = Math.max(0, Math.min(width, currentX));
+                    currentY = Math.max(0, Math.min(height, currentY));
+                    
+                    keyframes.push({ x: currentX, y: currentY, time: currentTime });
+                    [currentVx, currentVy] = reflectVelocity(currentVx, currentVy, wall);
+                }
+            }
+            
+            keyframes.reverse();
+            return keyframes;
+        }
+
+        // Average two velocities
+        function averageVelocity(vx1, vy1, vx2, vy2, speed) {
+            let avgVx = (vx1 + vx2) / 2;
+            let avgVy = (vy1 + vy2) / 2;
+            
+            if (Math.abs(avgVx) < 1e-10 && Math.abs(avgVy) < 1e-10) {
+                return randomVelocity(speed);
+            }
+            
+            return normalizeVelocity(avgVx, avgVy, speed);
+        }
+
+        // Run the full simulation
+        function runSimulation(params) {
+            const {
+                containerWidth,
+                containerHeight,
+                numParticles,
+                numCollisions,
+                particleSpeed,
+                animationDuration,
+                randomSeed,
+                collisionMargin = 20
+            } = params;
+            
+            // Initialize RNG
+            rng = createRng(randomSeed);
+            
+            // Schedule collision times
+            const timeMargin = animationDuration * 0.1;
+            const availableDuration = animationDuration - (2 * timeMargin);
+            
+            let collisionTimes;
+            if (numCollisions === 1) {
+                collisionTimes = [animationDuration / 2];
+            } else {
+                const timeStep = availableDuration / (numCollisions - 1);
+                collisionTimes = [];
+                for (let i = 0; i < numCollisions; i++) {
+                    collisionTimes.push(timeMargin + i * timeStep);
+                }
+            }
+            
+            // Assign particles to collisions
+            const particleIds = [];
+            for (let i = 1; i <= numParticles; i++) {
+                particleIds.push(i);
+            }
+            shuffleArray(particleIds);
+            
+            const collidingIds = particleIds.slice(0, numCollisions * 2);
+            const nonCollidingIds = particleIds.slice(numCollisions * 2);
+            
+            // Create collisions
+            const collisions = [];
+            for (let i = 0; i < numCollisions; i++) {
+                collisions.push({
+                    id: i + 1,
+                    time: collisionTimes[i],
+                    x: randomUniform(collisionMargin, containerWidth - collisionMargin),
+                    y: randomUniform(collisionMargin, containerHeight - collisionMargin),
+                    particle1_id: collidingIds[i * 2],
+                    particle2_id: collidingIds[i * 2 + 1],
+                    result_particle_id: null
+                });
+            }
+            
+            // Create particles
+            const particles = [];
+            let nextN2O4Id = numParticles + 1;
+            
+            // Create colliding particles
+            for (const collision of collisions) {
+                const angle1 = randomUniform(0, 2 * Math.PI);
+                const angle2 = angle1 + Math.PI + randomUniform(-Math.PI / 3, Math.PI / 3);
+                
+                const vx1 = particleSpeed * Math.cos(angle1);
+                const vy1 = particleSpeed * Math.sin(angle1);
+                const vx2 = particleSpeed * Math.cos(angle2);
+                const vy2 = particleSpeed * Math.sin(angle2);
+                
+                // Backward trajectories for NO2 particles
+                const keyframes1 = calculateBackwardTrajectory(
+                    collision.x, collision.y, vx1, vy1,
+                    collision.time, 0.0,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                const keyframes2 = calculateBackwardTrajectory(
+                    collision.x, collision.y, vx2, vy2,
+                    collision.time, 0.0,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                particles.push({
+                    id: collision.particle1_id,
+                    type: 'NO2',
+                    keyframes: keyframes1,
+                    start_time: 0.0,
+                    end_time: collision.time,
+                    collision_id: collision.id,
+                    velocity: [vx1, vy1]
+                });
+                
+                particles.push({
+                    id: collision.particle2_id,
+                    type: 'NO2',
+                    keyframes: keyframes2,
+                    start_time: 0.0,
+                    end_time: collision.time,
+                    collision_id: collision.id,
+                    velocity: [vx2, vy2]
+                });
+                
+                // Forward trajectory for N2O4
+                const [n2o4Vx, n2o4Vy] = averageVelocity(vx1, vy1, vx2, vy2, particleSpeed);
+                const n2o4Keyframes = calculateForwardTrajectory(
+                    collision.x, collision.y, n2o4Vx, n2o4Vy,
+                    collision.time, animationDuration,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                collision.result_particle_id = nextN2O4Id;
+                
+                particles.push({
+                    id: nextN2O4Id,
+                    type: 'N2O4',
+                    keyframes: n2o4Keyframes,
+                    start_time: collision.time,
+                    end_time: animationDuration,
+                    collision_id: collision.id,
+                    velocity: [n2o4Vx, n2o4Vy]
+                });
+                
+                nextN2O4Id++;
+            }
+            
+            // Create non-colliding particles
+            for (const particleId of nonCollidingIds) {
+                const margin = 10;
+                const startX = randomUniform(margin, containerWidth - margin);
+                const startY = randomUniform(margin, containerHeight - margin);
+                const [vx, vy] = randomVelocity(particleSpeed);
+                
+                const keyframes = calculateForwardTrajectory(
+                    startX, startY, vx, vy,
+                    0.0, animationDuration,
+                    containerWidth, containerHeight, particleSpeed
+                );
+                
+                particles.push({
+                    id: particleId,
+                    type: 'NO2',
+                    keyframes: keyframes,
+                    start_time: 0.0,
+                    end_time: animationDuration,
+                    collision_id: null,
+                    velocity: [vx, vy]
+                });
+            }
+            
+            // Sort particles
+            particles.sort((a, b) => {
+                if (a.type !== b.type) return a.type === 'NO2' ? -1 : 1;
+                return a.id - b.id;
+            });
+            
+            return {
+                success: true,
+                params: {
+                    container_width: containerWidth,
+                    container_height: containerHeight,
+                    animation_duration: animationDuration
+                },
+                particles: particles,
+                collisions: collisions,
+                summary: {
+                    total_particles: particles.length,
+                    no2_count: particles.filter(p => p.type === 'NO2').length,
+                    n2o4_count: particles.filter(p => p.type === 'N2O4').length,
+                    collision_count: collisions.length
+                }
+            };
+        }
+
+        // ============================================================
+        // UI CODE
+        // ============================================================
+
         const canvas = document.getElementById('simulationCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Controls
         const containerSizeInput = document.getElementById('containerSize');
         const numParticlesInput = document.getElementById('numParticles');
         const numCollisionsInput = document.getElementById('numCollisions');
@@ -782,7 +1087,6 @@
         const randomSeedInput = document.getElementById('randomSeed');
         const runBtn = document.getElementById('runBtn');
 
-        // Playback
         const playPauseBtn = document.getElementById('playPauseBtn');
         const restartBtn = document.getElementById('restartBtn');
         const stepBtn = document.getElementById('stepBtn');
@@ -790,12 +1094,10 @@
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
 
-        // Displays
         const currentTimeDisplay = document.getElementById('currentTime');
         const totalTimeDisplay = document.getElementById('totalTime');
         const errorMessage = document.getElementById('errorMessage');
 
-        // Simulation state
         let simulationData = null;
         let currentTime = 0;
         let isPlaying = false;
@@ -803,7 +1105,6 @@
         let lastFrameTime = null;
         let animationId = null;
 
-        // Colors
         const NO2_COLOR = '#e94560';
         const N2O4_COLOR = '#4ecdc4';
         const PARTICLE_RADIUS = 6;
@@ -838,10 +1139,9 @@
             imagesLoaded++;
             if (imagesLoaded === 2) draw();
         };
-        no2Image.src = '/static/no2.svg';
-        n2o4Image.src = '/static/n2o4.svg';
+        no2Image.src = 'no2.svg';
+        n2o4Image.src = 'n2o4.svg';
 
-        // Update display values
         function updateDisplayValues() {
             document.getElementById('containerSizeValue').textContent = containerSizeInput.value;
             document.getElementById('containerSizeValue2').textContent = containerSizeInput.value;
@@ -851,7 +1151,6 @@
             document.getElementById('animationDurationValue').textContent = animationDurationInput.value;
             document.getElementById('playbackSpeedValue').textContent = playbackSpeedInput.value;
 
-            // Update max collisions based on particles
             const maxCollisions = Math.floor(numParticlesInput.value / 2);
             numCollisionsInput.max = maxCollisions;
             if (parseInt(numCollisionsInput.value) > maxCollisions) {
@@ -859,18 +1158,15 @@
                 document.getElementById('numCollisionsValue').textContent = maxCollisions;
             }
 
-            // Update canvas size
             const size = parseInt(containerSizeInput.value);
             canvas.width = size;
             canvas.height = size;
 
-            // Redraw if we have data
             if (simulationData) {
                 draw();
             }
         }
 
-        // Attach listeners
         [containerSizeInput, numParticlesInput, numCollisionsInput, particleSpeedInput, animationDurationInput].forEach(input => {
             input.addEventListener('input', updateDisplayValues);
         });
@@ -880,7 +1176,6 @@
             document.getElementById('playbackSpeedValue').textContent = playbackSpeed;
         });
 
-        // Progress bar click to seek
         progressBar.addEventListener('click', (e) => {
             if (!simulationData) return;
             const rect = progressBar.getBoundingClientRect();
@@ -890,43 +1185,33 @@
             updateTimeDisplay();
         });
 
-        // Run simulation
-        runBtn.addEventListener('click', async () => {
+        runBtn.addEventListener('click', () => {
             runBtn.disabled = true;
             runBtn.textContent = 'Running...';
             errorMessage.style.display = 'none';
 
-            const params = {
-                container_width: parseInt(containerSizeInput.value),
-                container_height: parseInt(containerSizeInput.value),
-                num_particles: parseInt(numParticlesInput.value),
-                num_collisions: parseInt(numCollisionsInput.value),
-                particle_speed: parseInt(particleSpeedInput.value),
-                animation_duration: parseInt(animationDurationInput.value),
-                random_seed: randomSeedInput.value ? parseInt(randomSeedInput.value) : null
-            };
-
             try {
-                const response = await fetch('/api/simulate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(params)
-                });
+                const params = {
+                    containerWidth: parseInt(containerSizeInput.value),
+                    containerHeight: parseInt(containerSizeInput.value),
+                    numParticles: parseInt(numParticlesInput.value),
+                    numCollisions: parseInt(numCollisionsInput.value),
+                    particleSpeed: parseInt(particleSpeedInput.value),
+                    animationDuration: parseInt(animationDurationInput.value),
+                    randomSeed: randomSeedInput.value ? parseInt(randomSeedInput.value) : null
+                };
 
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Simulation failed');
+                if (params.numCollisions * 2 > params.numParticles) {
+                    throw new Error(`Cannot have ${params.numCollisions} collisions with only ${params.numParticles} particles.`);
                 }
 
-                simulationData = data;
+                simulationData = runSimulation(params);
                 currentTime = 0;
-                totalTimeDisplay.textContent = data.params.animation_duration.toFixed(2);
+                totalTimeDisplay.textContent = simulationData.params.animation_duration.toFixed(2);
                 
                 // Clear previous rotations and let new ones be generated on first draw
                 particleRotations.clear();
                 
-                // Reset playback
                 isPlaying = false;
                 playPauseBtn.textContent = '▶ Play';
                 playPauseBtn.classList.remove('active');
@@ -944,7 +1229,6 @@
             }
         });
 
-        // Playback controls
         playPauseBtn.addEventListener('click', () => {
             if (!simulationData) return;
             isPlaying = !isPlaying;
@@ -970,12 +1254,11 @@
             updateTimeDisplay();
         });
 
-        // Animation loop
         function animate() {
             if (!isPlaying || !simulationData) return;
 
             const now = performance.now();
-            const delta = (now - lastFrameTime) / 1000; // Convert to seconds
+            const delta = (now - lastFrameTime) / 1000;
             lastFrameTime = now;
 
             currentTime += delta * playbackSpeed;
@@ -995,7 +1278,6 @@
             }
         }
 
-        // Update time display
         function updateTimeDisplay() {
             if (!simulationData) return;
             currentTimeDisplay.textContent = currentTime.toFixed(2);
@@ -1003,7 +1285,6 @@
             progressFill.style.width = `${progress}%`;
         }
 
-        // Get interpolated position for a particle at given time
         function getParticlePosition(particle, time) {
             if (time < particle.start_time || time > particle.end_time) {
                 return null;
@@ -1011,13 +1292,11 @@
 
             const keyframes = particle.keyframes;
             
-            // Find surrounding keyframes
             for (let i = 0; i < keyframes.length - 1; i++) {
                 const kf1 = keyframes[i];
                 const kf2 = keyframes[i + 1];
 
                 if (time >= kf1.time && time <= kf2.time) {
-                    // Linear interpolation
                     const t = (time - kf1.time) / (kf2.time - kf1.time);
                     return {
                         x: kf1.x + t * (kf2.x - kf1.x),
@@ -1026,7 +1305,6 @@
                 }
             }
 
-            // At the last keyframe
             if (keyframes.length > 0) {
                 const last = keyframes[keyframes.length - 1];
                 if (Math.abs(time - last.time) < 0.01) {
@@ -1037,14 +1315,11 @@
             return null;
         }
 
-        // Draw the simulation
         function draw() {
-            // Clear canvas
             ctx.fillStyle = '#E8E8E8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if (!simulationData) {
-                // Draw placeholder
                 ctx.fillStyle = '#333';
                 ctx.font = '14px Segoe UI';
                 ctx.textAlign = 'center';
@@ -1057,14 +1332,12 @@
             let activeN2o4 = 0;
             let collisionsSoFar = 0;
 
-            // Count collisions that have occurred
             for (const collision of simulationData.collisions) {
                 if (currentTime >= collision.time) {
                     collisionsSoFar++;
                 }
             }
 
-            // Draw collision flash effects
             for (const collision of simulationData.collisions) {
                 const timeSinceCollision = currentTime - collision.time;
                 if (timeSinceCollision >= 0 && timeSinceCollision < 0.4) {
@@ -1073,7 +1346,7 @@
                     
                     ctx.save();
                     // Apply slight blur to collision effect
-                    ctx.filter = 'blur(3px)';
+                    ctx.filter = 'blur(1px)';
                     
                     ctx.beginPath();
                     ctx.arc(collision.x, collision.y, radius, 0, Math.PI * 2);
@@ -1089,7 +1362,6 @@
                 }
             }
 
-            // Draw particles
             for (const particle of particles) {
                 const pos = getParticlePosition(particle, currentTime);
                 if (!pos) continue;
@@ -1099,7 +1371,6 @@
                 const width = isNo2 ? NO2_WIDTH : N2O4_WIDTH;
                 const height = IMAGE_HEIGHT;
 
-                // Count active particles
                 if (isNo2) activeNo2++;
                 else activeN2o4++;
 
@@ -1139,7 +1410,7 @@
                     if (timeSinceCreation >= 0 && timeSinceCreation < 0.3) {
                         needsBrightening = true;
                         const fadeProgress = 1 - (timeSinceCreation / 0.3);
-                        brightenAmount = fadeProgress * 0.6; // 0 to 0.6 brightness boost
+                        brightenAmount = fadeProgress * 0.7; // 0 to 0.6 brightness boost
                     }
                 }
                 
@@ -1181,7 +1452,6 @@
                 ctx.restore();
             }
 
-            // Update stats
             document.getElementById('activeNo2').textContent = activeNo2;
             document.getElementById('activeN2o4').textContent = activeN2o4;
             document.getElementById('collisionCount').textContent = collisionsSoFar;
@@ -1204,14 +1474,11 @@
             });
         }
 
-        // Populate data tables
         function populateDataTables() {
             if (!simulationData) return;
 
-            // Show data section
             document.getElementById('dataSection').classList.add('visible');
 
-            // Populate collision table
             const collisionBody = document.getElementById('collisionTableBody');
             collisionBody.innerHTML = '';
 
@@ -1232,11 +1499,9 @@
                 collisionBody.appendChild(row);
             }
 
-            // Populate particle trajectories
             const trajContainer = document.getElementById('particleTrajectories');
             trajContainer.innerHTML = '';
 
-            // Sort particles: NO2 first, then N2O4
             const sortedParticles = [...simulationData.particles].sort((a, b) => {
                 if (a.type !== b.type) return a.type === 'NO2' ? -1 : 1;
                 return a.id - b.id;
@@ -1247,7 +1512,6 @@
                 const typeClass = isNo2 ? 'no2' : 'n2o4';
                 const typeName = isNo2 ? 'NO₂' : 'N₂O₄';
                 
-                // Find if this particle is involved in a collision
                 let collisionInfo = '';
                 if (isNo2) {
                     const collision = simulationData.collisions.find(
@@ -1298,7 +1562,6 @@
                                     const xVal = kf.x.toFixed(1);
                                     const yVal = kf.y.toFixed(1);
                                     
-                                    // Check if this is a start, end, or wall bounce
                                     let note = '';
                                     let highlightClass = '';
                                     if (idx === 0) {
@@ -1312,7 +1575,6 @@
                                             note = 'End';
                                         }
                                     } else {
-                                        // Check if at wall
                                         const atLeftWall = kf.x <= 1;
                                         const atRightWall = kf.x >= simulationData.params.container_width - 1;
                                         const atTopWall = kf.y >= simulationData.params.container_height - 1;
@@ -1341,14 +1603,12 @@
             }
         }
 
-        // Toggle particle details
         function toggleParticle(header) {
             header.classList.toggle('expanded');
             const keyframes = header.nextElementSibling;
             keyframes.classList.toggle('expanded');
         }
 
-        // Copy all data as CSV
         document.getElementById('copyAllBtn').addEventListener('click', () => {
             if (!simulationData) return;
 
@@ -1375,10 +1635,10 @@
             });
         });
 
-        // Initial setup
         updateDisplayValues();
         draw();
     </script>
 </body>
 </html>
+
 

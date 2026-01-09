@@ -158,6 +158,11 @@
             transform: none;
         }
 
+        .btn-primary.active-mode {
+            background: linear-gradient(135deg, #4ecdc4, #3bb5ad);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.4);
+        }
+
         .divider {
             height: 1px;
             background: rgba(255, 255, 255, 0.1);
@@ -197,16 +202,16 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #0a0a14;
+            background: #ffffff;
             border-radius: 12px;
             padding: 20px;
             min-height: 400px;
         }
 
         #simulationCanvas {
-            border: 2px solid rgba(255, 255, 255, 0.2);
+            border: 4px solid #8a8a8a;
             border-radius: 4px;
-            background: #111;
+            background: #E8E8E8;
         }
 
         .playback-controls {
@@ -607,6 +612,16 @@
 
         <div class="main-content">
             <div class="control-panel">
+                <h2>Animation Mode</h2>
+
+                <div class="control-group">
+                    <button class="btn btn-primary" id="modeCustom" onclick="setMode('custom')" style="margin-bottom: 8px;">Custom Mode</button>
+                    <button class="btn btn-primary" id="modeUnique1" onclick="setMode('unique1')" style="margin-bottom: 8px;">Unique Animation 1</button>
+                    <button class="btn btn-primary" id="modeUnique2" onclick="setMode('unique2')" style="margin-bottom: 8px;">Unique Animation 2</button>
+                </div>
+
+                <div class="divider"></div>
+
                 <h2>Parameters</h2>
 
                 <div class="control-group">
@@ -617,7 +632,7 @@
                     <input type="range" id="containerSize" min="200" max="500" value="300" step="10">
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" id="numParticlesGroup">
                     <label>
                         NO<sub>2</sub> Particles
                         <span class="value" id="numParticlesValue">15</span>
@@ -625,7 +640,7 @@
                     <input type="range" id="numParticles" min="4" max="15" value="15">
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" id="numCollisionsGroup">
                     <label>
                         Collisions
                         <span class="value" id="numCollisionsValue">6</span>
@@ -647,6 +662,22 @@
                         <span class="value"><span id="animationDurationValue">8</span> s</span>
                     </label>
                     <input type="range" id="animationDuration" min="4" max="20" value="8" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Start Rest Period
+                        <span class="value"><span id="startRestValue">0</span> s</span>
+                    </label>
+                    <input type="range" id="startRest" min="0" max="10" value="0" step="0.5">
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        End Rest Period
+                        <span class="value"><span id="endRestValue">0</span> s</span>
+                    </label>
+                    <input type="range" id="endRest" min="0" max="10" value="0" step="0.5">
                 </div>
 
                 <div class="control-group">
@@ -710,7 +741,7 @@
                     </div>
                     <div class="stat-box collisions">
                         <div class="value" id="collisionCount">0</div>
-                        <div class="label">Collisions</div>
+                        <div class="label">Events</div>
                     </div>
                 </div>
             </div>
@@ -721,7 +752,7 @@
             <h2>Animation <span>Keyframe Data</span></h2>
 
             <div class="collision-table-wrapper">
-                <h3>Collision Events</h3>
+                <h3>Collision & Split Events</h3>
                 <p class="time-format-note">Time format: seconds:frames (60fps). Click time cells to copy.</p>
                 <table class="data-table" id="collisionTable">
                     <thead>
@@ -766,6 +797,7 @@
         }
 
         let rng = createRng(null);
+        let currentMode = 'custom'; // 'custom', 'unique1', 'unique2'
 
         function randomUniform(min, max) {
             return min + rng() * (max - min);
@@ -906,29 +938,103 @@
                 containerHeight,
                 numParticles,
                 numCollisions,
+                numSplits = 0,  // New parameter for splits
                 particleSpeed,
                 animationDuration,
+                startRestPeriod = 0,
+                endRestPeriod = 0,
                 randomSeed,
-                collisionMargin = 20
+                collisionMargin = 20,
+                mode = 'custom'
             } = params;
             
             // Initialize RNG
             rng = createRng(randomSeed);
             
-            // Schedule collision times
-            const timeMargin = animationDuration * 0.1;
-            const availableDuration = animationDuration - (2 * timeMargin);
+            // Calculate available time for events (excluding rest periods)
+            const eventStartTime = startRestPeriod;
+            const eventEndTime = animationDuration - endRestPeriod;
+            const availableEventDuration = eventEndTime - eventStartTime;
             
+            if (availableEventDuration <= 0) {
+                throw new Error('Rest periods are too long for the animation duration.');
+            }
+            
+            // Schedule collision times with randomness
             let collisionTimes;
-            if (numCollisions === 1) {
-                collisionTimes = [animationDuration / 2];
-            } else {
-                const timeStep = availableDuration / (numCollisions - 1);
+            let splitEventSchedule = [];  // Track when splits should happen relative to other events
+            
+            // Helper function to add randomness to event timing (±15% of ideal spacing)
+            function addRandomness(time, idealSpacing) {
+                const variation = idealSpacing * 0.15;
+                const randomOffset = (rng() * 2 - 1) * variation;  // Random between -variation and +variation
+                return time + randomOffset;
+            }
+            
+            // For unique modes, calculate total events and space them with randomness
+            if (mode === 'unique1') {
+                // Animation 1: 6 collisions + 2 splits = 8 total events
+                const totalEvents = 6 + numSplits;
+                const timeMargin = availableEventDuration * 0.1;
+                const schedulingDuration = availableEventDuration - (2 * timeMargin);
+                const idealSpacing = schedulingDuration / (totalEvents - 1);
+                
                 collisionTimes = [];
-                for (let i = 0; i < numCollisions; i++) {
-                    collisionTimes.push(timeMargin + i * timeStep);
+                // First 6 events are collisions
+                for (let i = 0; i < 6; i++) {
+                    const idealTime = eventStartTime + timeMargin + i * idealSpacing;
+                    collisionTimes.push(addRandomness(idealTime, idealSpacing));
+                }
+                
+                // Mark events 6-7 as split times
+                for (let i = 6; i < totalEvents; i++) {
+                    const idealTime = eventStartTime + timeMargin + i * idealSpacing;
+                    splitEventSchedule.push(addRandomness(idealTime, idealSpacing));
+                }
+            } else if (mode === 'unique2' && params.secondBatchCollisions) {
+                // Animation 2: 4 collisions + 1 split + 4 collisions = 9 total events
+                const totalEvents = params.numCollisions + numSplits + params.secondBatchCollisions;
+                const timeMargin = availableEventDuration * 0.1;
+                const schedulingDuration = availableEventDuration - (2 * timeMargin);
+                const idealSpacing = schedulingDuration / (totalEvents - 1);
+                
+                collisionTimes = [];
+                // First 4 events are collisions (batch 1)
+                for (let i = 0; i < params.numCollisions; i++) {
+                    const idealTime = eventStartTime + timeMargin + i * idealSpacing;
+                    collisionTimes.push(addRandomness(idealTime, idealSpacing));
+                }
+                
+                // Event 4 is a split
+                const splitIdealTime = eventStartTime + timeMargin + params.numCollisions * idealSpacing;
+                splitEventSchedule.push(addRandomness(splitIdealTime, idealSpacing));
+                
+                // Events 5-8 are collisions (batch 2)
+                for (let i = params.numCollisions + numSplits; i < totalEvents; i++) {
+                    const idealTime = eventStartTime + timeMargin + i * idealSpacing;
+                    collisionTimes.push(addRandomness(idealTime, idealSpacing));
+                }
+            } else {
+                // Standard collision timing for custom mode
+                const timeMargin = availableEventDuration * 0.1;
+                const schedulingDuration = availableEventDuration - (2 * timeMargin);
+                
+                if (numCollisions === 1) {
+                    collisionTimes = [eventStartTime + availableEventDuration / 2];
+                } else {
+                    const idealSpacing = schedulingDuration / (numCollisions - 1);
+                    collisionTimes = [];
+                    for (let i = 0; i < numCollisions; i++) {
+                        const idealTime = eventStartTime + timeMargin + i * idealSpacing;
+                        collisionTimes.push(addRandomness(idealTime, idealSpacing));
+                    }
                 }
             }
+            
+            // Adjust numCollisions for unique2 to include both batches
+            const totalCollisions = mode === 'unique2' && params.secondBatchCollisions 
+                ? numCollisions + params.secondBatchCollisions 
+                : numCollisions;
             
             // Assign particles to collisions
             const particleIds = [];
@@ -937,12 +1043,12 @@
             }
             shuffleArray(particleIds);
             
-            const collidingIds = particleIds.slice(0, numCollisions * 2);
-            const nonCollidingIds = particleIds.slice(numCollisions * 2);
+            const collidingIds = particleIds.slice(0, totalCollisions * 2);
+            const nonCollidingIds = particleIds.slice(totalCollisions * 2);
             
             // Create collisions
             const collisions = [];
-            for (let i = 0; i < numCollisions; i++) {
+            for (let i = 0; i < totalCollisions; i++) {
                 collisions.push({
                     id: i + 1,
                     time: collisionTimes[i],
@@ -1048,6 +1154,119 @@
                 });
             }
             
+            // Create splits if needed
+            const splits = [];
+            if (splitEventSchedule.length > 0 && mode !== 'custom') {
+                // Use the pre-scheduled split times
+                const splitTimes = splitEventSchedule;
+                
+                for (let i = 0; i < splitTimes.length; i++) {
+                    const splitTime = splitTimes[i];
+                    
+                    // Find N2O4 particles that exist at this split time
+                    const availableN2o4 = particles.filter(p => 
+                        p.type === 'N2O4' && 
+                        p.start_time < splitTime &&
+                        p.end_time >= splitTime &&
+                        !p.split_id  // Not already scheduled to split
+                    );
+                    
+                    if (availableN2o4.length === 0) {
+                        console.warn(`No N2O4 particles available at split time ${splitTime}`);
+                        continue;
+                    }
+                    
+                    // Pick a random N2O4 particle to split
+                    const n2o4Particle = availableN2o4[Math.floor(rng() * availableN2o4.length)];
+                    
+                    // Find the position of the N2O4 at split time
+                    let splitPos = null;
+                    for (let j = 0; j < n2o4Particle.keyframes.length - 1; j++) {
+                        const kf1 = n2o4Particle.keyframes[j];
+                        const kf2 = n2o4Particle.keyframes[j + 1];
+                        if (splitTime >= kf1.time && splitTime <= kf2.time) {
+                            const t = (splitTime - kf1.time) / (kf2.time - kf1.time);
+                            splitPos = {
+                                x: kf1.x + t * (kf2.x - kf1.x),
+                                y: kf1.y + t * (kf2.y - kf1.y)
+                            };
+                            break;
+                        }
+                    }
+                    
+                    if (!splitPos) continue;
+                    
+                    // Truncate the N2O4 particle's trajectory at split time
+                    n2o4Particle.end_time = splitTime;
+                    const truncatedKeyframes = [];
+                    for (const kf of n2o4Particle.keyframes) {
+                        if (kf.time <= splitTime) {
+                            truncatedKeyframes.push(kf);
+                        }
+                    }
+                    // Add the split point as final keyframe
+                    if (truncatedKeyframes.length === 0 || truncatedKeyframes[truncatedKeyframes.length - 1].time < splitTime) {
+                        truncatedKeyframes.push({ x: splitPos.x, y: splitPos.y, time: splitTime });
+                    }
+                    n2o4Particle.keyframes = truncatedKeyframes;
+                    n2o4Particle.split_id = i + 1;
+                    
+                    // Create two new NO2 particles from the split
+                    const angle1 = randomUniform(0, 2 * Math.PI);
+                    const angle2 = angle1 + Math.PI + randomUniform(-Math.PI / 3, Math.PI / 3);
+                    
+                    const vx1 = particleSpeed * Math.cos(angle1);
+                    const vy1 = particleSpeed * Math.sin(angle1);
+                    const vx2 = particleSpeed * Math.cos(angle2);
+                    const vy2 = particleSpeed * Math.sin(angle2);
+                    
+                    const no2_1_keyframes = calculateForwardTrajectory(
+                        splitPos.x, splitPos.y, vx1, vy1,
+                        splitTime, animationDuration,
+                        containerWidth, containerHeight, particleSpeed
+                    );
+                    
+                    const no2_2_keyframes = calculateForwardTrajectory(
+                        splitPos.x, splitPos.y, vx2, vy2,
+                        splitTime, animationDuration,
+                        containerWidth, containerHeight, particleSpeed
+                    );
+                    
+                    const newNo2Id1 = particles.length + 1;
+                    const newNo2Id2 = particles.length + 2;
+                    
+                    particles.push({
+                        id: newNo2Id1,
+                        type: 'NO2',
+                        keyframes: no2_1_keyframes,
+                        start_time: splitTime,
+                        end_time: animationDuration,
+                        split_id: i + 1,
+                        velocity: [vx1, vy1]
+                    });
+                    
+                    particles.push({
+                        id: newNo2Id2,
+                        type: 'NO2',
+                        keyframes: no2_2_keyframes,
+                        start_time: splitTime,
+                        end_time: animationDuration,
+                        split_id: i + 1,
+                        velocity: [vx2, vy2]
+                    });
+                    
+                    splits.push({
+                        id: i + 1,
+                        time: splitTime,
+                        x: splitPos.x,
+                        y: splitPos.y,
+                        source_particle_id: n2o4Particle.id,
+                        result_particle1_id: newNo2Id1,
+                        result_particle2_id: newNo2Id2
+                    });
+                }
+            }
+            
             // Sort particles
             particles.sort((a, b) => {
                 if (a.type !== b.type) return a.type === 'NO2' ? -1 : 1;
@@ -1063,11 +1282,13 @@
                 },
                 particles: particles,
                 collisions: collisions,
+                splits: splits,
                 summary: {
                     total_particles: particles.length,
                     no2_count: particles.filter(p => p.type === 'NO2').length,
                     n2o4_count: particles.filter(p => p.type === 'N2O4').length,
-                    collision_count: collisions.length
+                    collision_count: collisions.length,
+                    split_count: splits.length
                 }
             };
         }
@@ -1075,6 +1296,35 @@
         // ============================================================
         // UI CODE
         // ============================================================
+
+        function setMode(mode) {
+            currentMode = mode;
+            
+            // Update button states
+            document.getElementById('modeCustom').classList.toggle('active-mode', mode === 'custom');
+            document.getElementById('modeUnique1').classList.toggle('active-mode', mode === 'unique1');
+            document.getElementById('modeUnique2').classList.toggle('active-mode', mode === 'unique2');
+            
+            // Lock/unlock parameters based on mode
+            const numParticlesGroup = document.getElementById('numParticlesGroup');
+            const numCollisionsGroup = document.getElementById('numCollisionsGroup');
+            const numParticlesInput = document.getElementById('numParticles');
+            const numCollisionsInput = document.getElementById('numCollisions');
+            
+            if (mode === 'custom') {
+                // Unlock all parameters
+                numParticlesGroup.style.display = 'block';
+                numCollisionsGroup.style.display = 'block';
+                numParticlesInput.disabled = false;
+                numCollisionsInput.disabled = false;
+            } else {
+                // Lock particle count and collision count
+                numParticlesGroup.style.display = 'none';
+                numCollisionsGroup.style.display = 'none';
+                numParticlesInput.disabled = true;
+                numCollisionsInput.disabled = true;
+            }
+        }
 
         const canvas = document.getElementById('simulationCanvas');
         const ctx = canvas.getContext('2d');
@@ -1084,6 +1334,8 @@
         const numCollisionsInput = document.getElementById('numCollisions');
         const particleSpeedInput = document.getElementById('particleSpeed');
         const animationDurationInput = document.getElementById('animationDuration');
+        const startRestInput = document.getElementById('startRest');
+        const endRestInput = document.getElementById('endRest');
         const randomSeedInput = document.getElementById('randomSeed');
         const runBtn = document.getElementById('runBtn');
 
@@ -1149,6 +1401,8 @@
             document.getElementById('numCollisionsValue').textContent = numCollisionsInput.value;
             document.getElementById('particleSpeedValue').textContent = particleSpeedInput.value;
             document.getElementById('animationDurationValue').textContent = animationDurationInput.value;
+            document.getElementById('startRestValue').textContent = startRestInput.value;
+            document.getElementById('endRestValue').textContent = endRestInput.value;
             document.getElementById('playbackSpeedValue').textContent = playbackSpeedInput.value;
 
             const maxCollisions = Math.floor(numParticlesInput.value / 2);
@@ -1167,7 +1421,7 @@
             }
         }
 
-        [containerSizeInput, numParticlesInput, numCollisionsInput, particleSpeedInput, animationDurationInput].forEach(input => {
+        [containerSizeInput, numParticlesInput, numCollisionsInput, particleSpeedInput, animationDurationInput, startRestInput, endRestInput].forEach(input => {
             input.addEventListener('input', updateDisplayValues);
         });
 
@@ -1191,18 +1445,43 @@
             errorMessage.style.display = 'none';
 
             try {
-                const params = {
+                const animDuration = parseInt(animationDurationInput.value);
+                let params = {
                     containerWidth: parseInt(containerSizeInput.value),
                     containerHeight: parseInt(containerSizeInput.value),
-                    numParticles: parseInt(numParticlesInput.value),
-                    numCollisions: parseInt(numCollisionsInput.value),
                     particleSpeed: parseInt(particleSpeedInput.value),
-                    animationDuration: parseInt(animationDurationInput.value),
-                    randomSeed: randomSeedInput.value ? parseInt(randomSeedInput.value) : null
+                    animationDuration: animDuration,
+                    startRestPeriod: parseFloat(startRestInput.value),
+                    endRestPeriod: parseFloat(endRestInput.value),
+                    randomSeed: randomSeedInput.value ? parseInt(randomSeedInput.value) : null,
+                    mode: currentMode
                 };
 
-                if (params.numCollisions * 2 > params.numParticles) {
-                    throw new Error(`Cannot have ${params.numCollisions} collisions with only ${params.numParticles} particles.`);
+                // Validate rest periods
+                if (params.startRestPeriod + params.endRestPeriod >= animDuration) {
+                    throw new Error(`Start rest (${params.startRestPeriod}s) + End rest (${params.endRestPeriod}s) must be less than animation duration (${animDuration}s).`);
+                }
+
+                // Add mode-specific parameters
+                if (currentMode === 'custom') {
+                    params.numParticles = parseInt(numParticlesInput.value);
+                    params.numCollisions = parseInt(numCollisionsInput.value);
+                    params.numSplits = 0;
+                    
+                    if (params.numCollisions * 2 > params.numParticles) {
+                        throw new Error(`Cannot have ${params.numCollisions} collisions with only ${params.numParticles} particles.`);
+                    }
+                } else if (currentMode === 'unique1') {
+                    // Unique Animation 1: 15 NO2 → 6 collisions → 2 splits (evenly spaced)
+                    params.numParticles = 15;
+                    params.numCollisions = 6;
+                    params.numSplits = 2;
+                } else if (currentMode === 'unique2') {
+                    // Unique Animation 2: 15 NO2 → 4 collisions → 1 split → 4 collisions (evenly spaced)
+                    params.numParticles = 15;
+                    params.numCollisions = 4; // First batch
+                    params.secondBatchCollisions = 4; // Second batch
+                    params.numSplits = 1;
                 }
 
                 simulationData = runSimulation(params);
@@ -1316,7 +1595,7 @@
         }
 
         function draw() {
-            ctx.fillStyle = '#111';
+            ctx.fillStyle = '#E8E8E8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if (!simulationData) {
@@ -1338,17 +1617,63 @@
                 }
             }
 
+            // Count splits that have occurred
+            if (simulationData.splits) {
+                for (const split of simulationData.splits) {
+                    if (currentTime >= split.time) {
+                        collisionsSoFar++; // Count splits as events in the collision counter
+                    }
+                }
+            }
+
             for (const collision of simulationData.collisions) {
                 const timeSinceCollision = currentTime - collision.time;
                 if (timeSinceCollision >= 0 && timeSinceCollision < 0.4) {
                     const alpha = 1 - (timeSinceCollision / 0.4);
                     const radius = PARTICLE_RADIUS * 2 + timeSinceCollision * 50;
                     
+                    ctx.save();
+                    // Apply slight blur to collision effect
+                    ctx.filter = 'blur(1px)';
+                    
                     ctx.beginPath();
                     ctx.arc(collision.x, collision.y, radius, 0, Math.PI * 2);
                     // Brighter yellow with higher opacity
                     ctx.fillStyle = `rgba(255, 255, 0, ${alpha * 0.75})`;
                     ctx.fill();
+                    // Medium orange border
+                    ctx.strokeStyle = `rgba(255, 140, 0, ${alpha * 0.9})`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    ctx.restore();
+                }
+            }
+
+            // Draw split flash effects (same as collision effect)
+            if (simulationData.splits) {
+                for (const split of simulationData.splits) {
+                    const timeSinceSplit = currentTime - split.time;
+                    if (timeSinceSplit >= 0 && timeSinceSplit < 0.4) {
+                        const alpha = 1 - (timeSinceSplit / 0.4);
+                        const radius = PARTICLE_RADIUS * 2 + timeSinceSplit * 50;
+                        
+                        ctx.save();
+                        // Apply slight blur to split effect
+                        ctx.filter = 'blur(1px)';
+                        
+                        ctx.beginPath();
+                        ctx.arc(split.x, split.y, radius, 0, Math.PI * 2);
+                        // Brighter yellow with higher opacity
+                        ctx.fillStyle = `rgba(255, 255, 0, ${alpha * 0.75})`;
+                        ctx.fill();
+                        // Medium orange border
+                        ctx.strokeStyle = `rgba(255, 140, 0, ${alpha * 0.9})`;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        
+                        ctx.restore();
+                    }
                 }
             }
 
@@ -1400,7 +1725,7 @@
                     if (timeSinceCreation >= 0 && timeSinceCreation < 0.3) {
                         needsBrightening = true;
                         const fadeProgress = 1 - (timeSinceCreation / 0.3);
-                        brightenAmount = fadeProgress * 0.6; // 0 to 0.6 brightness boost
+                        brightenAmount = fadeProgress * 0.7; // 0 to 0.6 brightness boost
                     }
                 }
                 
@@ -1472,20 +1797,66 @@
             const collisionBody = document.getElementById('collisionTableBody');
             collisionBody.innerHTML = '';
 
+            // Combine collisions and splits into a single sorted events array
+            const events = [];
+            
             for (const collision of simulationData.collisions) {
+                events.push({
+                    type: 'collision',
+                    time: collision.time,
+                    x: collision.x,
+                    y: collision.y,
+                    data: collision
+                });
+            }
+            
+            if (simulationData.splits && simulationData.splits.length > 0) {
+                for (const split of simulationData.splits) {
+                    events.push({
+                        type: 'split',
+                        time: split.time,
+                        x: split.x,
+                        y: split.y,
+                        data: split
+                    });
+                }
+            }
+            
+            // Sort events by time
+            events.sort((a, b) => a.time - b.time);
+            
+            // Render sorted events
+            for (const event of events) {
                 const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="copyable" onclick="copyCell(this)" data-value="${toFrameTime(collision.time)}">${toFrameTime(collision.time)}</td>
-                    <td>(${collision.x.toFixed(1)}, ${collision.y.toFixed(1)})</td>
-                    <td>
-                        <span class="particle-badge no2">NO₂ #${collision.particle1_id}</span>
-                        <span class="particle-badge no2">NO₂ #${collision.particle2_id}</span>
-                    </td>
-                    <td class="arrow">→</td>
-                    <td>
-                        <span class="particle-badge n2o4">N₂O₄ #${collision.result_particle_id}</span>
-                    </td>
-                `;
+                if (event.type === 'collision') {
+                    const collision = event.data;
+                    row.innerHTML = `
+                        <td class="copyable" onclick="copyCell(this)" data-value="${toFrameTime(collision.time)}">${toFrameTime(collision.time)}</td>
+                        <td>(${collision.x.toFixed(1)}, ${collision.y.toFixed(1)})</td>
+                        <td>
+                            <span class="particle-badge no2">NO₂ #${collision.particle1_id}</span>
+                            <span class="particle-badge no2">NO₂ #${collision.particle2_id}</span>
+                        </td>
+                        <td class="arrow">→</td>
+                        <td>
+                            <span class="particle-badge n2o4">N₂O₄ #${collision.result_particle_id}</span>
+                        </td>
+                    `;
+                } else { // split
+                    const split = event.data;
+                    row.innerHTML = `
+                        <td class="copyable" onclick="copyCell(this)" data-value="${toFrameTime(split.time)}">${toFrameTime(split.time)}</td>
+                        <td>(${split.x.toFixed(1)}, ${split.y.toFixed(1)})</td>
+                        <td>
+                            <span class="particle-badge n2o4">N₂O₄ #${split.source_particle_id}</span>
+                        </td>
+                        <td class="arrow">→</td>
+                        <td>
+                            <span class="particle-badge no2">NO₂ #${split.result_particle1_id}</span>
+                            <span class="particle-badge no2">NO₂ #${split.result_particle2_id}</span>
+                        </td>
+                    `;
+                }
                 collisionBody.appendChild(row);
             }
 
@@ -1504,18 +1875,35 @@
                 
                 let collisionInfo = '';
                 if (isNo2) {
+                    // Check if it collides
                     const collision = simulationData.collisions.find(
                         c => c.particle1_id === particle.id || c.particle2_id === particle.id
                     );
-                    if (collision) {
+                    // Check if it was created from a split
+                    const split = simulationData.splits ? simulationData.splits.find(
+                        s => s.result_particle1_id === particle.id || s.result_particle2_id === particle.id
+                    ) : null;
+                    
+                    if (collision && split) {
+                        collisionInfo = `Created from split at ${toFrameTime(split.time)}, collides at ${toFrameTime(collision.time)}`;
+                    } else if (collision) {
                         collisionInfo = `Collides at ${toFrameTime(collision.time)} → N₂O₄ #${collision.result_particle_id}`;
+                    } else if (split) {
+                        collisionInfo = `Created from N₂O₄ #${split.source_particle_id} split at ${toFrameTime(split.time)}`;
                     } else {
                         collisionInfo = 'No collision';
                     }
                 } else {
+                    // N2O4 particle - check if created from collision or splits
                     const collision = simulationData.collisions.find(c => c.result_particle_id === particle.id);
-                    if (collision) {
+                    const split = simulationData.splits ? simulationData.splits.find(s => s.source_particle_id === particle.id) : null;
+                    
+                    if (collision && split) {
+                        collisionInfo = `Created from NO₂ #${collision.particle1_id} + #${collision.particle2_id}, splits at ${toFrameTime(split.time)}`;
+                    } else if (collision) {
                         collisionInfo = `Created from NO₂ #${collision.particle1_id} + #${collision.particle2_id}`;
+                    } else if (split) {
+                        collisionInfo = `Splits at ${toFrameTime(split.time)} → NO₂ #${split.result_particle1_id} + #${split.result_particle2_id}`;
                     }
                 }
 
@@ -1555,11 +1943,23 @@
                                     let note = '';
                                     let highlightClass = '';
                                     if (idx === 0) {
-                                        note = isNo2 ? 'Start' : 'Created (collision)';
+                                        if (isNo2) {
+                                            // Check if created from split
+                                            const fromSplit = simulationData.splits ? simulationData.splits.find(
+                                                s => s.result_particle1_id === particle.id || s.result_particle2_id === particle.id
+                                            ) : null;
+                                            note = fromSplit ? 'Created (split)' : 'Start';
+                                        } else {
+                                            note = 'Created (collision)';
+                                        }
                                         highlightClass = 'keyframe-highlight';
                                     } else if (idx === particle.keyframes.length - 1) {
                                         if (isNo2 && particle.end_time < simulationData.params.animation_duration) {
                                             note = 'Destroyed (collision)';
+                                            highlightClass = 'keyframe-highlight';
+                                        } else if (!isNo2 && particle.end_time < simulationData.params.animation_duration) {
+                                            // N2O4 that ends before animation end must have split
+                                            note = 'Destroyed (split)';
                                             highlightClass = 'keyframe-highlight';
                                         } else {
                                             note = 'End';
@@ -1625,6 +2025,9 @@
             });
         });
 
+        // Initialize mode on page load
+        setMode('custom');
+        
         updateDisplayValues();
         draw();
     </script>
