@@ -1031,11 +1031,6 @@
                 }
             }
             
-            // Adjust numCollisions for unique2 to include both batches
-            const totalCollisions = mode === 'unique2' && params.secondBatchCollisions 
-                ? numCollisions + params.secondBatchCollisions 
-                : numCollisions;
-            
             // Assign particles to collisions
             const particleIds = [];
             for (let i = 1; i <= numParticles; i++) {
@@ -1043,12 +1038,24 @@
             }
             shuffleArray(particleIds);
             
-            const collidingIds = particleIds.slice(0, totalCollisions * 2);
-            const nonCollidingIds = particleIds.slice(totalCollisions * 2);
+            // For unique2, only assign particles for the first batch initially
+            // The second batch will use particles created from splits
+            let collidingIds, nonCollidingIds;
+            if (mode === 'unique2' && params.secondBatchCollisions) {
+                // First batch only: numCollisions particles
+                collidingIds = particleIds.slice(0, numCollisions * 2);
+                nonCollidingIds = particleIds.slice(numCollisions * 2);
+            } else {
+                // Standard: assign all collision particles upfront
+                const totalCollisions = numCollisions;
+                collidingIds = particleIds.slice(0, totalCollisions * 2);
+                nonCollidingIds = particleIds.slice(totalCollisions * 2);
+            }
             
-            // Create collisions
+            // Create collisions (first batch only for unique2)
             const collisions = [];
-            for (let i = 0; i < totalCollisions; i++) {
+            const firstBatchCount = mode === 'unique2' && params.secondBatchCollisions ? numCollisions : (mode === 'unique2' ? numCollisions + params.secondBatchCollisions : collisionTimes.length);
+            for (let i = 0; i < firstBatchCount; i++) {
                 collisions.push({
                     id: i + 1,
                     time: collisionTimes[i],
@@ -1264,6 +1271,194 @@
                         result_particle1_id: newNo2Id1,
                         result_particle2_id: newNo2Id2
                     });
+                }
+            }
+            
+            // For unique2: Create second batch of collisions after splits
+            if (mode === 'unique2' && params.secondBatchCollisions) {
+                // Get available NO2 particles (both original and from splits)
+                const availableNo2Particles = particles.filter(p => {
+                    if (p.type !== 'NO2') return false;
+                    // Check if already collided
+                    const hasCollided = collisions.some(c => 
+                        c.particle1_id === p.id || c.particle2_id === p.id
+                    );
+                    return !hasCollided;
+                });
+                
+                // Prioritize original particles, then split particles
+                const originalParticles = availableNo2Particles.filter(p => p.start_time === 0);
+                const splitParticles = availableNo2Particles.filter(p => p.start_time > 0);
+                
+                shuffleArray(originalParticles);
+                shuffleArray(splitParticles);
+                
+                // Combine: use original particles first, then split particles if needed
+                const secondBatchParticles = [...originalParticles, ...splitParticles].slice(0, params.secondBatchCollisions * 2);
+                
+                // Create second batch collisions
+                for (let i = 0; i < params.secondBatchCollisions && (i * 2 + 1) < secondBatchParticles.length; i++) {
+                    const collisionIndex = numCollisions + i;
+                    const collisionTime = collisionTimes[collisionIndex];
+                    const particle1 = secondBatchParticles[i * 2];
+                    const particle2 = secondBatchParticles[i * 2 + 1];
+                    
+                    const isSplit1 = particle1.start_time > 0;
+                    const isSplit2 = particle2.start_time > 0;
+                    
+                    let collisionX, collisionY;
+                    let vx1, vy1, vx2, vy2;
+                    
+                    // If both are split particles, find where they'll naturally be
+                    if (isSplit1 && isSplit2) {
+                        // Calculate where each will be at collision time
+                        const p1Start = particle1.keyframes[0];
+                        const traj1 = calculateForwardTrajectory(
+                            p1Start.x, p1Start.y, particle1.velocity[0], particle1.velocity[1],
+                            particle1.start_time, collisionTime,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                        const pos1 = traj1[traj1.length - 1];
+                        
+                        const p2Start = particle2.keyframes[0];
+                        const traj2 = calculateForwardTrajectory(
+                            p2Start.x, p2Start.y, particle2.velocity[0], particle2.velocity[1],
+                            particle2.start_time, collisionTime,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                        const pos2 = traj2[traj2.length - 1];
+                        
+                        // Collision at midpoint
+                        collisionX = (pos1.x + pos2.x) / 2;
+                        collisionY = (pos1.y + pos2.y) / 2;
+                        
+                        // Use their existing velocities
+                        [vx1, vy1] = particle1.velocity;
+                        [vx2, vy2] = particle2.velocity;
+                        
+                        // Update trajectories to end at collision
+                        particle1.keyframes = calculateForwardTrajectory(
+                            p1Start.x, p1Start.y, vx1, vy1,
+                            particle1.start_time, collisionTime,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                        particle2.keyframes = calculateForwardTrajectory(
+                            p2Start.x, p2Start.y, vx2, vy2,
+                            particle2.start_time, collisionTime,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                    } 
+                    else if (isSplit1 || isSplit2) {
+                        // One split, one original: use split particle's future position for collision
+                        const splitParticle = isSplit1 ? particle1 : particle2;
+                        const originalParticle = isSplit1 ? particle2 : particle1;
+                        
+                        const splitStart = splitParticle.keyframes[0];
+                        const splitTraj = calculateForwardTrajectory(
+                            splitStart.x, splitStart.y, splitParticle.velocity[0], splitParticle.velocity[1],
+                            splitParticle.start_time, collisionTime,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                        const splitPos = splitTraj[splitTraj.length - 1];
+                        
+                        // Collision near where split particle will be
+                        collisionX = splitPos.x + randomUniform(-20, 20);
+                        collisionY = splitPos.y + randomUniform(-20, 20);
+                        // Keep in bounds
+                        collisionX = Math.max(collisionMargin, Math.min(containerWidth - collisionMargin, collisionX));
+                        collisionY = Math.max(collisionMargin, Math.min(containerHeight - collisionMargin, collisionY));
+                        
+                        // Generate velocities
+                        const angle = randomUniform(0, 2 * Math.PI);
+                        const vxOrig = particleSpeed * Math.cos(angle);
+                        const vyOrig = particleSpeed * Math.sin(angle);
+                        
+                        if (isSplit1) {
+                            [vx1, vy1] = splitParticle.velocity;
+                            [vx2, vy2] = [vxOrig, vyOrig];
+                            particle1.keyframes = splitTraj;
+                            particle2.keyframes = calculateBackwardTrajectory(
+                                collisionX, collisionY, vx2, vy2,
+                                collisionTime, particle2.start_time,
+                                containerWidth, containerHeight, particleSpeed
+                            );
+                        } else {
+                            [vx1, vy1] = [vxOrig, vyOrig];
+                            [vx2, vy2] = splitParticle.velocity;
+                            particle1.keyframes = calculateBackwardTrajectory(
+                                collisionX, collisionY, vx1, vy1,
+                                collisionTime, particle1.start_time,
+                                containerWidth, containerHeight, particleSpeed
+                            );
+                            particle2.keyframes = splitTraj;
+                        }
+                    }
+                    else {
+                        // Both original particles
+                        collisionX = randomUniform(collisionMargin, containerWidth - collisionMargin);
+                        collisionY = randomUniform(collisionMargin, containerHeight - collisionMargin);
+                        
+                        const angle1 = randomUniform(0, 2 * Math.PI);
+                        const angle2 = angle1 + Math.PI + randomUniform(-Math.PI / 3, Math.PI / 3);
+                        vx1 = particleSpeed * Math.cos(angle1);
+                        vy1 = particleSpeed * Math.sin(angle1);
+                        vx2 = particleSpeed * Math.cos(angle2);
+                        vy2 = particleSpeed * Math.sin(angle2);
+                        
+                        particle1.keyframes = calculateBackwardTrajectory(
+                            collisionX, collisionY, vx1, vy1,
+                            collisionTime, particle1.start_time,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                        particle2.keyframes = calculateBackwardTrajectory(
+                            collisionX, collisionY, vx2, vy2,
+                            collisionTime, particle2.start_time,
+                            containerWidth, containerHeight, particleSpeed
+                        );
+                    }
+                    
+                    // Create collision
+                    const collision = {
+                        id: collisions.length + 1,
+                        time: collisionTime,
+                        x: collisionX,
+                        y: collisionY,
+                        particle1_id: particle1.id,
+                        particle2_id: particle2.id,
+                        result_particle_id: null
+                    };
+                    collisions.push(collision);
+                    
+                    // Update particle properties
+                    particle1.end_time = collisionTime;
+                    particle1.collision_id = collision.id;
+                    particle1.velocity = [vx1, vy1];
+                    
+                    particle2.end_time = collisionTime;
+                    particle2.collision_id = collision.id;
+                    particle2.velocity = [vx2, vy2];
+                    
+                    // Create resulting N2O4
+                    const [n2o4Vx, n2o4Vy] = averageVelocity(vx1, vy1, vx2, vy2, particleSpeed);
+                    const n2o4Keyframes = calculateForwardTrajectory(
+                        collision.x, collision.y, n2o4Vx, n2o4Vy,
+                        collision.time, animationDuration,
+                        containerWidth, containerHeight, particleSpeed
+                    );
+                    
+                    collision.result_particle_id = nextN2O4Id;
+                    
+                    particles.push({
+                        id: nextN2O4Id,
+                        type: 'N2O4',
+                        keyframes: n2o4Keyframes,
+                        start_time: collision.time,
+                        end_time: animationDuration,
+                        collision_id: collision.id,
+                        velocity: [n2o4Vx, n2o4Vy]
+                    });
+                    
+                    nextN2O4Id++;
                 }
             }
             
