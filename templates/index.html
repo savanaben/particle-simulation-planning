@@ -672,9 +672,9 @@
                     <input type="number" id="randomSeed" placeholder="Leave empty for random">
                 </div>
 
-                <div class="divider"></div>
+                <div class="divider"></div> 
 
-                <button class="btn btn-primary" id="runBtn">Run Simulation</button>
+                <button class="btn btn-primary" id="runBtn">Load Simulation</button>
 
                 <div id="errorMessage" class="error-message" style="display: none;"></div>
             </div>
@@ -940,7 +940,7 @@
                 errorMessage.style.display = 'block';
             } finally {
                 runBtn.disabled = false;
-                runBtn.textContent = 'Run Simulation';
+                runBtn.textContent = 'Load Simulation';
             }
         });
 

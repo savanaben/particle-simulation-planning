@@ -14,18 +14,22 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 20px 20px 0 20px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
     text-align: center;
-    padding: 20px 0 30px;
+    padding: 0 0 15px;
+    flex-shrink: 0; /* Don't shrink header */
 }
 
 h1 {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 300;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     color: #fff;
     text-transform: uppercase;
 }
@@ -37,8 +41,8 @@ h1 span {
 
 .subtitle {
     color: #888;
-    font-size: 0.9rem;
-    margin-top: 8px;
+    font-size: 0.8rem;
+    margin-top: 4px;
 }
 
 .main-content {
@@ -46,6 +50,35 @@ h1 span {
     grid-template-columns: 350px 1fr;
     gap: 30px;
     align-items: start;
+    flex: 1;
+    min-height: 0; /* Allow flex child to shrink */
+    overflow: hidden; /* Prevent main container from scrolling */
+}
+
+/* Right content wrapper for independent scrolling */
+.right-content {
+    height: 100%; /* Fill available height */
+    overflow-y: auto; /* Enable independent scrolling */
+    overflow-x: hidden;
+}
+
+/* Custom scrollbar styling for right content */
+.right-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.right-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.right-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.right-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 /* Control Panel */
@@ -55,6 +88,28 @@ h1 span {
     padding: 24px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
+    height: 100%; /* Fill available height */
+    overflow-y: auto; /* Enable independent scrolling */
+    overflow-x: hidden;
+}
+
+/* Custom scrollbar styling for control panel */
+.control-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.control-panel::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.control-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.control-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .control-panel h2 {

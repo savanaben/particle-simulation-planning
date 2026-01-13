@@ -19,12 +19,16 @@
 
                 <div class="control-group">
                     <button class="btn btn-primary" id="modeCustom" style="margin-bottom: 8px;">Custom Mode</button>
-                    <button class="btn btn-primary" id="modeTemp25Particles15" style="margin-bottom: 8px;">Temp = 25 / Particles = 15</button>
-                    <button class="btn btn-primary" id="modeTemp5Particles15" style="margin-bottom: 8px;">Temp = 5 / Particles = 15</button>
-                    <button class="btn btn-primary" id="modeTemp25Particles10" style="margin-bottom: 8px;">Temp = 25 / Particles = 10</button>
                     <button class="btn btn-primary" id="modeTemp5Particles10" style="margin-bottom: 8px;">Temp = 5 / Particles = 10</button>
-                    <button class="btn btn-primary" id="modeTemp15Particles15" style="margin-bottom: 8px;">Temp = 15 / Particles = 15</button>
+
+                    <button class="btn btn-primary" id="modeTemp5Particles15" style="margin-bottom: 8px;">Temp = 5 / Particles = 15</button>
                     <button class="btn btn-primary" id="modeTemp15Particles10" style="margin-bottom: 8px;">Temp = 15 / Particles = 10</button>
+                    <button class="btn btn-primary" id="modeTemp15Particles15" style="margin-bottom: 8px;">Temp = 15 / Particles = 15</button>
+
+                    <button class="btn btn-primary" id="modeTemp25Particles10" style="margin-bottom: 8px;">Temp = 25 / Particles = 10</button>
+
+                    <button class="btn btn-primary" id="modeTemp25Particles15" style="margin-bottom: 8px;">Temp = 25 / Particles = 15</button>
+
                 </div>
 
                 <div class="divider"></div>
@@ -99,6 +103,7 @@
                 <div id="errorMessage" class="error-message" style="display: none;"></div>
             </div>
 
+            <div class="right-content">
             <div class="canvas-area">
                 <div class="canvas-header">
                     <h2>Simulation Preview</h2>
@@ -152,10 +157,9 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Data Tables Section -->
-        <div class="data-section" id="dataSection">
+            <!-- Data Tables Section -->
+            <div class="data-section" id="dataSection">
             <h2>Animation <span>Keyframe Data</span></h2>
 
             <div class="collision-table-wrapper">
@@ -181,6 +185,7 @@
                 <button class="copy-btn" id="copyAllBtn">Copy All Data as CSV</button>
                 <div id="particleTrajectories">
                 </div>
+            </div>
             </div>
         </div>
     </div>

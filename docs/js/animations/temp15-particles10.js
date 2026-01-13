@@ -4,9 +4,9 @@ import { createAnimationConfig } from './base.js';
 export const temp15Particles10Animation = createAnimationConfig(
     // Defaults: fixed seed and parameters
     {
-        randomSeed: 44444,
-        animationDuration: 10,
-        particleSpeed: 60,
+        randomSeed: 44506,
+        animationDuration: 12,
+        particleSpeed: 80,
         containerSize: 250,
         startRestPeriod: 1,
         endRestPeriod: 1

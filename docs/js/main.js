@@ -133,7 +133,7 @@ const controls = initializeControls({
             errorMessage.textContent = err.message;
             errorMessage.style.display = 'block';
         } finally {
-            controls.setRunButtonState(false, 'Run Simulation');
+            controls.setRunButtonState(false, 'Load Simulation');
         }
     },
     onPlayPause: () => {
